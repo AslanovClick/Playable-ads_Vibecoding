@@ -1,0 +1,242 @@
+@font-face { font-family: "Inter"; font-weight: 400; font-display: block; src: url("../node_modules/@fontsource/inter/files/inter-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 500; font-display: block; src: url("../node_modules/@fontsource/inter/files/inter-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-weight: 900; font-display: block; src: url("../node_modules/@fontsource/inter/files/inter-latin-900-normal.woff2") format("woff2"); }
+
+:root {
+  --img-bg: url("assets/bg.webp");
+  --img-safe-closed: url("assets/safe_closed.webp");
+  --img-safe-open: url("assets/safe_open.webp");
+  --img-face: url("assets/face.webp");
+  --img-hub: url("assets/hub.webp");
+  --img-coin-broken: url("assets/coin_broken.webp");
+  --img-gold-stack: url("assets/gold_stack.webp");
+  --img-gold-bar: url("assets/gold_bar.webp");
+  --img-hand: url("assets/hand.webp");
+  --img-logo: url("assets/logo.svg");
+  --img-panel: url("assets/panel.webp");
+  --img-bar: url("assets/bar.webp");
+  --img-coins: url("assets/coins.webp");
+  --img-checks: url("assets/checks.webp");
+  --img-button: url("assets/button.webp");
+
+  --gold-grad: rgb(255, 255, 149) 24.229%, rgb(217, 128, 41) 86.371%, rgb(196, 91, 26) 148.51%;
+}
+
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  background: #140a06;
+  touch-action: none; user-select: none; -webkit-user-select: none;
+  -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+}
+
+#stage {
+  position: absolute; left: 0; top: 0;
+  width: 1089px; height: 1920px;
+  transform-origin: 0 0;
+  overflow: hidden;
+  font-family: "Inter", Arial, sans-serif;
+  cursor: pointer;
+  transition: opacity 0.4s;
+}
+#stage.loading { opacity: 0; }
+
+.abs { position: absolute; }
+.fill { left: 0; top: 0; width: 100%; height: 100%; }
+.img { background-size: 100% 100%; background-repeat: no-repeat; }
+.blur { filter: blur(9.5px); }
+
+/* ---------- scene (positions = Figma frame, 1089x1920) ---------- */
+#bg { left: -44px; top: -126px; width: 1150px; height: 2060px; background-image: var(--img-bg); }
+
+#safe { left: 120px; top: 373px; width: 849px; height: 1009px; }
+#safeClosed { background-image: var(--img-safe-closed); }
+#safeOpen { background-image: var(--img-safe-open); opacity: 0; }
+
+/* Dial face (tick ring + spokes) is stored un-skewed to a circle and squeezed back here,
+   so it turns around its own centre in perspective. The raised hub with the logo is static. */
+#dial { left: 44.051%; top: 25.723%; width: 40.145%; height: 33.790%; transform: scaleX(0.9164); }
+#dialWig, #dialSpr { transform-origin: 50% 50%; }
+#dialSpr { background-image: var(--img-face); will-change: transform; }
+#dialHub { left: 54.973%; top: 31.050%; width: 24.231%; height: 23.592%; background-image: var(--img-hub); }
+/* Idle hint: one shared 1.6s loop (--tap). On the hand's press (~48%) the dial gives a little
+   turn, the hub is pushed in and two small rings spread from the lock. All start together. */
+:root { --tap: 1.6s; }
+.idle #dialWig { animation: dialNudge var(--tap) ease-out infinite; }
+.idle #dialHub { animation: hubPress var(--tap) ease-out infinite; }
+
+/* Round waves spreading from the lock while waiting for a tap */
+#waves { left: 465px; top: 603px; width: 400px; height: 400px; pointer-events: none; }
+#waves i {
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%; box-sizing: border-box; border-radius: 50%;
+  border: 4px solid rgba(255, 228, 150, 0.95);
+  box-shadow: 0 0 14px rgba(255, 190, 80, 0.8), inset 0 0 10px rgba(255, 190, 80, 0.5);
+  opacity: 0;
+}
+.idle #waves i:nth-child(1) { animation: wave1 var(--tap) linear infinite; }
+.idle #waves i:nth-child(2) { animation: wave2 var(--tap) linear infinite; }
+
+#goldR { left: 873px; top: 1221px; width: 416px; height: 251px; }
+#goldR .img { background-image: var(--img-gold-stack); }
+#goldL { left: -91.6px; top: 1307px; width: 258.55px; height: 156px; transform: scaleX(-1); }
+#goldL .img { background-image: var(--img-gold-bar); }
+#goldL .blur { filter: blur(6px); }
+
+#darkTop { left: 0; top: -26px; width: 1089px; height: 605px; opacity: 0.49; background: linear-gradient(to bottom, #000, rgba(0,0,0,0)); pointer-events: none; }
+#darkBot { left: 0; top: 1318px; width: 1089px; height: 605px; opacity: 0.49; background: linear-gradient(to bottom, rgba(0,0,0,0), #000); pointer-events: none; }
+
+#logo { left: 237px; top: 76px; width: 615px; height: 97px; background-image: var(--img-logo); }
+
+/* ---------- gradient text with dark red outline ---------- */
+.gt { white-space: nowrap; text-align: center; text-transform: uppercase; font-weight: 900; }
+.gt > span { display: block; }
+.gt .s {
+  position: absolute; left: 0; top: 0; width: 100%;
+  color: #841502; -webkit-text-stroke: 8px #841502;
+  text-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.gt .f {
+  position: relative;
+  background: linear-gradient(var(--ga, 172deg), var(--gold-grad));
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent; -webkit-text-fill-color: transparent;
+}
+
+#title { left: 0; width: 100%; top: 216px; font-size: 64.989px; line-height: 0.9334; --ga: 171.35deg; }
+#tapText { left: 12px; width: 100%; top: 1517px; font-size: 80px; line-height: 1.13; --ga: 175.46deg; }
+.idle #tapText { animation: breathe 1.3s ease-in-out infinite; }
+
+/* ---------- progress panel ---------- */
+#panel { left: 101px; top: 1060px; width: 887px; height: 393px; }
+#panelBg { background-image: var(--img-panel); }
+#barWrap {
+  left: 0; top: 0; width: 0; height: 393px; overflow: hidden;
+  -webkit-mask-image: linear-gradient(to left, transparent 0, #000 36px);
+  mask-image: linear-gradient(to left, transparent 0, #000 36px);
+}
+#bar { left: 0; top: 0; width: 887px; height: 393px; background-image: var(--img-bar); }
+.coin, .check { background-size: 887px 393px; opacity: 0; }
+.coin { width: 200px; height: 200px; top: 86px; background-image: var(--img-coins); }
+.check { width: 110px; height: 97px; top: 61px; background-image: var(--img-checks); transform-origin: 30% 80%; }
+.coin[data-slot="0"] { left: 48px;  background-position: -48px -86px; }
+.coin[data-slot="1"] { left: 343px; background-position: -343px -86px; }
+.coin[data-slot="2"] { left: 638px; background-position: -638px -86px; }
+.check[data-slot="0"] { left: 153px; background-position: -153px -61px; }
+.check[data-slot="1"] { left: 448px; background-position: -448px -61px; }
+.check[data-slot="2"] { left: 743px; background-position: -743px -61px; }
+#broken { left: 48px; top: 86px; width: 200px; height: 200px; background: var(--img-coin-broken) 0 0 / 100% 100%; opacity: 0; }
+#label {
+  left: 0; width: 100%; top: 36px;
+  text-align: center; text-transform: uppercase;
+  font-size: 46.513px; font-weight: 500; line-height: 1.13; color: #ffbb58;
+}
+
+/* ---------- hand hint ---------- */
+.hand { width: 230px; height: 261px; background-image: var(--img-hand); transform-origin: 12% 8%; opacity: 0; pointer-events: none; }
+.hand.on { opacity: 1; animation: handTap var(--tap) ease-in-out infinite; transition: opacity 0.25s; }
+.hand.off { opacity: 0; transition: opacity 0.2s; }
+#hand { left: 739px; top: 904px; }
+
+/* ---------- door opening light ---------- */
+#doorGlow {
+  left: 0; top: 421px; width: 340px; height: 882px; border-radius: 43px;
+  background: linear-gradient(to left, #f6b129, rgba(238, 159, 0, 0));
+  filter: blur(67.5px); mix-blend-mode: screen; opacity: 0; pointer-events: none;
+}
+#glowBack {
+  left: -256px; top: 70px; width: 1600px; height: 1600px; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 210, 110, 0.75), rgba(255, 150, 30, 0.25) 55%, rgba(255, 140, 0, 0) 100%);
+  mix-blend-mode: screen; opacity: 0; pointer-events: none;
+}
+#rays, #popRays {
+  border-radius: 50%; pointer-events: none; opacity: 0;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 220, 130, 0.55) 0deg 7deg, rgba(255, 220, 130, 0) 7deg 22.5deg);
+  -webkit-mask-image: radial-gradient(closest-side, #000 15%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 15%, transparent 100%);
+  mix-blend-mode: screen;
+}
+#rays { left: -256px; top: 70px; width: 1600px; height: 1600px; }
+.open #rays { animation: spin 18s linear infinite; }
+#flash {
+  background: radial-gradient(circle at 50% 42%, rgba(255, 246, 200, 1), rgba(255, 196, 80, 0.85) 35%, rgba(255, 150, 20, 0) 75%);
+  opacity: 0; pointer-events: none; mix-blend-mode: screen;
+}
+
+/* ---------- particles ---------- */
+#fx { pointer-events: none; }
+.spark {
+  position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%;
+  background: radial-gradient(circle, #fff 0, #ffe58a 30%, rgba(255, 170, 40, 0.9) 55%, rgba(255, 140, 0, 0) 72%);
+}
+.spark.dust { background: radial-gradient(circle, #6b4a36 0, rgba(60, 38, 26, 0.85) 45%, rgba(40, 25, 15, 0) 72%); }
+.ripple {
+  position: absolute; width: 160px; height: 160px; margin: -80px 0 0 -80px; border-radius: 50%;
+  border: 6px solid rgba(255, 226, 140, 0.9); box-shadow: 0 0 24px rgba(255, 200, 80, 0.8);
+}
+
+/* ---------- final pop-up ---------- */
+#popup { visibility: hidden; }
+#popup.show { visibility: visible; }
+#popBox {
+  left: 82.87px; top: 421px; width: 923.27px; height: 1171px; box-sizing: border-box;
+  border: 7px solid #c58f5d; border-radius: 37px;
+  background: linear-gradient(to bottom, #523a27, #170806);
+  opacity: 0.9;
+}
+#popClip { left: 82.87px; top: 421px; width: 923.27px; height: 1171px; border-radius: 37px; overflow: hidden; pointer-events: none; }
+#popRays { left: 47px; top: -157px; width: 800px; height: 800px; }
+#popup.show #popRays { animation: spin 14s linear infinite; }
+#popGold { left: 286.23px; top: 517.41px; width: 486.68px; height: 293.65px; background-image: var(--img-gold-stack); }
+#popText { left: 0; width: 100%; top: 895.09px; font-size: 80px; line-height: 1.13; --ga: 169.92deg; }
+#popBtn { left: 123.92px; top: 1225.3px; width: 840.99px; height: 245.68px; background-image: var(--img-button); overflow: hidden; border-radius: 80px; }
+#popBtn span {
+  position: absolute; left: 0; width: 100%; top: 86.58px;
+  text-align: center; text-transform: uppercase;
+  font-size: 55px; font-weight: 900; line-height: 72.5px; color: #294f00;
+}
+#popBtn .shine {
+  position: absolute; top: 0; left: -40%; width: 25%; height: 78%;
+  background: linear-gradient(100deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.55) 50%, rgba(255,255,255,0) 100%);
+  transform: skewX(-20deg);
+}
+#popup.cta #popBtn { animation: btnPulse 1.2s ease-in-out infinite; }
+#popup.cta #popBtn .shine { animation: shine 2.4s ease-in-out infinite 0.4s; }
+#popHand { left: 756px; top: 1376px; }
+
+#legal {
+  left: 42px; top: 1726px; width: 1005px;
+  font-size: 18px; font-weight: 400; line-height: normal; color: #dfc8c8;
+  text-align: center; text-transform: uppercase; pointer-events: none;
+}
+
+/* ---------- keyframes ---------- */
+@keyframes handTap {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  36% { transform: translate(-14px, -18px) scale(1); }
+  48% { transform: translate(-6px, -6px) scale(0.88); }
+  60% { transform: translate(-8px, -9px) scale(0.96); }
+}
+/* rings start at the edge of the lock bezel (r~190) and spread a little */
+@keyframes wave1 {
+  0%, 47% { transform: scale(0.95); opacity: 0; animation-timing-function: cubic-bezier(.2,.7,.4,1); }
+  52% { opacity: 0.95; }
+  92%, 100% { transform: scale(1.32); opacity: 0; }
+}
+@keyframes wave2 {
+  0%, 55% { transform: scale(0.95); opacity: 0; animation-timing-function: cubic-bezier(.2,.7,.4,1); }
+  60% { opacity: 0.7; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
+@keyframes dialNudge {
+  0%, 46%, 100% { transform: rotate(0deg); }
+  54% { transform: rotate(-7deg); }
+  68% { transform: rotate(3deg); }
+  82% { transform: rotate(0deg); }
+}
+@keyframes hubPress {
+  0%, 46%, 70%, 100% { transform: scale(1); }
+  52% { transform: scale(0.95); }
+}
+@keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes btnPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+@keyframes shine { 0% { left: -40%; } 55%, 100% { left: 125%; } }

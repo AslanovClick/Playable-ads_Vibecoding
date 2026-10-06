@@ -1,0 +1,14 @@
+{
+  "name": "jugabet-safe-playable",
+  "version": "1.0.0",
+  "description": "JugaBet Safe Cracking playable ad",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "assets": "python tools/prepare_assets.py",
+    "dev": "python -m http.server 8765"
+  },
+  "devDependencies": {
+    "@fontsource/inter": "^5.3.0"
+  },
+  "private": true
+}
