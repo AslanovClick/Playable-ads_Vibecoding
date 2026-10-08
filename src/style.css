@@ -88,7 +88,8 @@ html, body {
 
 /* ---------- gradient text with dark red outline ---------- */
 .gt { white-space: nowrap; text-align: center; text-transform: uppercase; font-weight: 900; }
-.gt > span { display: block; }
+.gt .s { display: block; }
+.gt .f { display: inline-block; vertical-align: top; } /* hugs the text so it can be measured */
 .gt .s {
   position: absolute; left: 0; top: 0; width: 100%;
   color: #841502; -webkit-text-stroke: 8px #841502;
@@ -187,9 +188,14 @@ html, body {
 #popup.show #popRays { animation: spin 14s linear infinite; }
 #popGold { left: 286.23px; top: 517.41px; width: 486.68px; height: 293.65px; background-image: var(--img-gold-stack); }
 #popText { left: 0; width: 100%; top: 895.09px; font-size: 80px; line-height: 1.13; --ga: 169.92deg; }
-#popBtn { left: 123.92px; top: 1225.3px; width: 840.99px; height: 245.68px; background-image: var(--img-button); overflow: hidden; border-radius: 80px; }
+#popBtn { left: 123.92px; top: 1225.3px; width: 840.99px; height: 245.68px; background-image: var(--img-button); }
+/* the shine is clipped by the button's own shape (no CSS radius that would cut its corners) */
+#popBtn .gloss {
+  position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: hidden;
+  -webkit-mask: var(--img-button) 0 0 / 100% 100% no-repeat; mask: var(--img-button) 0 0 / 100% 100% no-repeat;
+}
 #popBtn span {
-  position: absolute; left: 0; width: 100%; top: 86.58px;
+  position: absolute; left: 0; width: 100%; top: 73.4px; /* face centre (y=109.6) - half line */
   text-align: center; text-transform: uppercase;
   font-size: 55px; font-weight: 900; line-height: 72.5px; color: #294f00;
 }

@@ -35,13 +35,28 @@
   fit();
 
   // Gradient text = outline layer + gradient fill layer
-  $("popText").setAttribute("data-html", "Your bonus:<br><span class='amount'>0</span> " + CFG.currency);
+  var T = CFG.text;
+  $("title").setAttribute("data-html", T.title);
+  $("tapText").setAttribute("data-html", T.tap);
+  $("popText").setAttribute("data-html", T.bonus + "<br><span class='amount'>0</span> " + CFG.bonusUnit);
+  $("popBtn").querySelector("span").innerHTML = T.cta;
+  $("label").textContent = T.tapsLeft + TAPS;
+
   function setGradText(el, h) {
     el.innerHTML = '<span class="s">' + h + '</span><span class="f">' + h + "</span>";
+    fitText(el);
   }
-  Array.prototype.forEach.call(stage.querySelectorAll(".gt"), function (el) {
-    setGradText(el, el.getAttribute("data-html"));
-  });
+  // Longer (translated) copy shrinks to the width given in data-max instead of overflowing.
+  function fitText(el) {
+    var max = parseFloat(el.getAttribute("data-max"));
+    var f = el.querySelector(".f");
+    if (!max || !f) return;
+    el.style.fontSize = "";
+    var w = f.offsetWidth;
+    if (w > max) el.style.fontSize = parseFloat(getComputedStyle(el).fontSize) * max / w + "px";
+  }
+  var gts = stage.querySelectorAll(".gt");
+  Array.prototype.forEach.call(gts, function (el) { setGradText(el, el.getAttribute("data-html")); });
 
   // ---------------------------------------------------------------- helpers
   function anim(el, frames, opt) {
@@ -125,7 +140,7 @@
     animIn(dialHub, [{ transform: "scale(1)" }, { transform: "scale(0.94)" }, { transform: "scale(1)" }], { duration: 220 });
     animIn(tapText, [{ transform: "scale(1.12)" }, { transform: "scale(1)" }], { duration: 300, easing: EASE_OUT });
     var left = TAPS - k;
-    label.textContent = left > 0 ? "Taps left: " + left : "OPEN";
+    label.textContent = left > 0 ? T.tapsLeft + left : T.open;
     anim(barWrap, [{ width: BAR_W[k - 1] + "px" }, { width: BAR_W[k] + "px" }], { duration: 420, easing: EASE_OUT });
 
     if (k === 1) failTap(); else okTap(k);
@@ -171,14 +186,14 @@
     sparks(sx, sy, 12, { dist: 130, cls: "dust", delay: 380, dur: 650, gravity: 80 });
 
     // "Tap to unlock" -> "Try again!" for a moment
-    setGradText(tapText, "Try again!");
+    setGradText(tapText, T.tryAgain);
     clearTimeout(tryTimer);
-    tryTimer = setTimeout(function () { setGradText(tapText, "Tap to Unlock"); }, 1600);
+    tryTimer = setTimeout(function () { setGradText(tapText, T.tap); }, 1600);
   }
 
   function okTap(k) {
     clearTimeout(tryTimer);
-    setGradText(tapText, "Tap to Unlock");
+    setGradText(tapText, T.tap);
     anim(dialSpr, [
       { transform: "rotate(" + DIAL_ANGLE[k - 1] + "deg)" },
       { transform: "rotate(" + DIAL_ANGLE[k] + "deg)" }
@@ -285,6 +300,10 @@
     var amounts = popup.querySelectorAll(".amount");
     var target = CFG.bonusAmount, t0 = 0, DUR = 1000;
     function fmt(v) { return Math.round(v).toLocaleString(CFG.locale); }
+    // size the line for the final value, then count up to it
+    for (var i = 0; i < amounts.length; i++) amounts[i].textContent = fmt(target);
+    fitText($("popText"));
+    for (i = 0; i < amounts.length; i++) amounts[i].textContent = fmt(0);
     function step(t) {
       if (!t0) t0 = t;
       var p = Math.min(1, (t - t0) / DUR);
@@ -319,6 +338,7 @@
     if (started) return;
     started = true;
     fit();
+    Array.prototype.forEach.call(gts, fitText); // re-measure with the web font loaded
     stage.classList.remove("loading");
     setIdle(true);
     AD.gameReady();

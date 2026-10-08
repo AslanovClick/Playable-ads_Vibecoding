@@ -1,6 +1,6 @@
 // Bundles src/ into a single self-contained dist/index.html (all assets as data URIs).
 //
-//   node tools/build.mjs [--amount=10000] [--url=https://...] [--currency=MXN] [--out=dist/index.html]
+//   node tools/build.mjs [--amount=125] [--unit="giros gratis"] [--url=https://...] [--out=dist/index.html]
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve, extname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,7 +39,7 @@ const inlineCss = (file) => {
 const overrides = {};
 if (args.amount) overrides.bonusAmount = Number(args.amount);
 if (args.url) overrides.clickUrl = args.url;
-if (args.currency) overrides.currency = args.currency;
+if (args.unit) overrides.bonusUnit = args.unit;
 
 let html = readFileSync(resolve(SRC, "index.html"), "utf8");
 html = html.replace(/<link rel="stylesheet" href="([^"]+)">/g, (_, p) => `<style>${inlineCss(resolve(SRC, p))}</style>`);

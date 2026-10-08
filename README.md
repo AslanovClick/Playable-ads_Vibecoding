@@ -1,7 +1,7 @@
 # JugaBet — Safe Cracking playable
 
 Портретная мини-игра (пропорции фрейма Figma 1089×1920): 3 нажатия на замок → сейф открывается → попап с бонусом и CTA.
-Первое нажатие всегда «ломает» диск (иллюзия выбора, «Try again!»), второе и третье успешны, на третьем сломанный диск чинится.
+Первое нажатие всегда «ломает» диск (иллюзия выбора, «¡Inténtalo de nuevo!»), второе и третье успешны, на третьем сломанный диск чинится.
 Без фреймворков: HTML + CSS + ~300 строк JS (Web Animations API).
 
 ## Сборка
@@ -9,11 +9,11 @@
 ```bash
 npm install
 npm run build                                   # -> dist/index.html (один файл, ~450 KB)
-node tools/build.mjs --amount=5000 --url=https://landing.example
+node tools/build.mjs --amount=125 --unit="giros gratis" --url=https://landing.example
 ```
 
-Параметры кампании лежат в [src/config.js](src/config.js): `bonusAmount`, `currency`, `clickUrl`, `locale`.
-Флаги `--amount`, `--url`, `--currency` переопределяют их при сборке.
+Параметры кампании и все тексты (испанский) лежат в [src/config.js](src/config.js): `bonusAmount`, `bonusUnit`, `clickUrl`, `locale`, `text`.
+Флаги `--amount`, `--unit`, `--url` переопределяют их при сборке. Длинные тексты автоматически ужимаются по ширине (`data-max` в разметке).
 
 ## Разработка
 
