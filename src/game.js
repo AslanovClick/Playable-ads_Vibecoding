@@ -1,62 +1,71 @@
 (function () {
   "use strict";
 
-  var CFG = window.PLAYABLE_CONFIG;
+  var CFG = window.PLAYABLE_CONFIG, T = CFG.text;
   var W = 1089, H = 1920; // Figma frame
-  var TAPS = 3;
 
-  // Stage-space coordinates of interesting points
-  var DIAL = { x: 665, y: 803 }; // visual centre of the dial (bezel), not the off-centre logo
-  var PANEL = { x: 101, y: 1060 };
-  var SLOT_X = [148, 443, 738], SLOT_Y = 186; // inside panel
-  // Tap 1 always "breaks" the first disc (illusion of chance), taps 2 and 3 succeed and
-  // the broken disc gets repaired on the last one.
-  var BAR_W = [0, 0, 443, 887]; // revealed progress bar width after each tap
-  var DIAL_ANGLE = [0, 0, 360, 720]; // full turns keep the painted lighting correct at rest
+  // Fan of card backs (Figma frame 1): centre and rotation of each card, left to right.
+  var FAN = [
+    { x: 304.1, y: 952.4, r: -24.12 },
+    { x: 432.0, y: 919.9, r: -14.12 },
+    { x: 534.5, y: 917.4, r: -4.12 },
+    { x: 655.0, y: 907.4, r: 5.88 },
+    { x: 802.8, y: 949.8, r: 15.88 }
+  ];
+  var HINT = 4; // the hand points at the right-most card
+  var BACK_W = 397, BACK_H = 541.4; // visible card back in the fan
+  var HERO_W = 507, HERO_H = 674; // upright card front (its native size = Figma frame 3)
+  // Chosen card poses: frame 3 (revealed, tilted) and frame 4 (final, upright, bigger)
+  var REVEAL = { x: 577.5, y: 993.5, r: 11.38, sx: 1, sy: 1 };
+  var FINAL = { x: 544.7, y: 897.3, r: 0, sx: 1.2013, sy: 1.2013 };
+
+  var HOLD = /[?&]hold=1/.test(location.search);
 
   var EASE_OUT = "cubic-bezier(.22,.8,.3,1)";
-  var EASE_BACK = "cubic-bezier(.3,1.45,.5,1)";
+  var PATH_MS = 1600; // pick -> final pose, one continuous move
 
   function $(id) { return document.getElementById(id); }
-  var stage = $("stage"), safe = $("safe"), dial = $("dial"), dialSpr = $("dialSpr"), dialHub = $("dialHub"), broken = $("broken");
-  var hand = $("hand"), label = $("label"), barWrap = $("barWrap"), fx = $("fx"), tapText = $("tapText");
-  var popup = $("popup"), popHand = $("popHand");
-  var coins = stage.querySelectorAll(".coin"), checks = stage.querySelectorAll(".check");
+  var stage = $("stage"), fanEl = $("fan"), hero = $("hero"), flip = hero.querySelector(".flip");
+  var hand = $("hand"), fx = $("fx");
 
   // ---------------------------------------------------------------- layout
-  // The stage always keeps the Figma frame proportions and is fitted (contain) into the screen.
+  var view = { s: 1, ox: 0, oy: 0 };
   function fit() {
     var vw = window.innerWidth, vh = window.innerHeight;
     var s = Math.min(vw / W, vh / H);
-    stage.style.transform = "translate(" + (vw - W * s) / 2 + "px," + (vh - H * s) / 2 + "px) scale(" + s + ")";
+    view = { s: s, ox: (vw - W * s) / 2, oy: (vh - H * s) / 2 };
+    stage.style.transform = "translate(" + view.ox + "px," + view.oy + "px) scale(" + s + ")";
   }
   window.addEventListener("resize", fit);
   window.addEventListener("orientationchange", function () { setTimeout(fit, 120); });
   fit();
 
-  // Gradient text = outline layer + gradient fill layer
-  var T = CFG.text;
-  $("title").setAttribute("data-html", T.title);
-  $("tapText").setAttribute("data-html", T.tap);
-  $("popText").setAttribute("data-html", T.bonus + "<br><span class='amount'>0</span> " + CFG.bonusUnit);
-  $("popBtn").querySelector("span").innerHTML = T.cta;
-  $("label").textContent = T.tapsLeft + TAPS;
-
+  // ---------------------------------------------------------------- text
   function setGradText(el, h) {
     el.innerHTML = '<span class="s">' + h + '</span><span class="f">' + h + "</span>";
     fitText(el);
   }
-  // Longer (translated) copy shrinks to the width given in data-max instead of overflowing.
+  // Longer copy shrinks to the width given in data-max instead of overflowing.
   function fitText(el) {
     var max = parseFloat(el.getAttribute("data-max"));
-    var f = el.querySelector(".f");
-    if (!max || !f) return;
+    var inner = el.querySelector(".f") || el.firstElementChild;
+    if (!max || !inner) return;
     el.style.fontSize = "";
-    var w = f.offsetWidth;
+    var w = inner.offsetWidth;
     if (w > max) el.style.fontSize = parseFloat(getComputedStyle(el).fontSize) * max / w + "px";
   }
+  var unitHtml = CFG.bonusUnit.split(" ").join("<br>"); // "giros<br>gratis" on the card
+  $("title").setAttribute("data-html", T.title);
+  hero.querySelector(".c1").setAttribute("data-html", T.cardTop);
+  hero.querySelector(".c3").setAttribute("data-html", unitHtml);
+  // the amount is part of the card face and set once, so nothing re-renders while the card flies
+  var amount = CFG.bonusAmount.toLocaleString(CFG.locale);
+  hero.querySelector(".c2").setAttribute("data-html", amount);
+  $("plateText").firstElementChild.innerHTML = T.plate + " " + amount + " " + CFG.bonusUnit;
+  $("btnText").firstElementChild.innerHTML = T.cta;
   var gts = stage.querySelectorAll(".gt");
   Array.prototype.forEach.call(gts, function (el) { setGradText(el, el.getAttribute("data-html")); });
+  var fitted = [$("plateText"), $("btnText")];
 
   // ---------------------------------------------------------------- helpers
   function anim(el, frames, opt) {
@@ -72,14 +81,63 @@
     a.onfinish = function () { a.cancel(); };
     return a;
   }
-  function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
   function rnd(a, b) { return a + Math.random() * (b - a); }
+  function pose(p, w, h) {
+    return "translate(" + (p.x - w / 2) + "px," + (p.y - h / 2) + "px) rotate(" + p.r + "deg) scale(" + (p.sx || 1) + "," + (p.sy || 1) + ")";
+  }
+
+  // cubic-bezier easing as a function (same curve CSS would use)
+  function bezier(x1, y1, x2, y2) {
+    function at(a, b, t) { return 3 * a * t * (1 - t) * (1 - t) + 3 * b * t * t * (1 - t) + t * t * t; }
+    return function (x) {
+      var lo = 0, hi = 1, t = x;
+      for (var i = 0; i < 24; i++) { t = (lo + hi) / 2; if (at(x1, x2, t) < x) lo = t; else hi = t; }
+      return at(y1, y2, t);
+    };
+  }
+  var EASE = bezier(0.32, 0, 0.18, 1); // gentle start, long soft landing
+
+  // Smooth Catmull-Rom curve through card poses, sampled by length (position, rotation and
+  // scale all count), so it can be walked at an even, eased speed. mark[i] = where pose i is.
+  function curve(pts) {
+    var keys = ["x", "y", "r", "sx", "sy"], samples = [], mark = [0];
+    function get(i) { return pts[Math.max(0, Math.min(pts.length - 1, i))]; }
+    for (var j = 0; j < pts.length - 1; j++) {
+      var p0 = get(j - 1), p1 = get(j), p2 = get(j + 1), p3 = get(j + 2);
+      for (var s = (j ? 1 : 0); s <= 24; s++) {
+        var t = s / 24, o = {};
+        keys.forEach(function (k) {
+          var a = p0[k], b = p1[k], c = p2[k], d = p3[k];
+          o[k] = 0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (3 * b - a - 3 * c + d) * t * t * t);
+        });
+        samples.push(o);
+      }
+    }
+    var len = [0];
+    for (var i = 1; i < samples.length; i++) {
+      var A = samples[i - 1], B = samples[i];
+      len.push(len[i - 1] + Math.sqrt(Math.pow(B.x - A.x, 2) + Math.pow(B.y - A.y, 2) +
+        Math.pow((B.r - A.r) * 4, 2) + Math.pow((B.sx - A.sx) * 400, 2)));
+    }
+    var total = len[len.length - 1];
+    for (j = 1; j < pts.length; j++) mark.push(len[j * 24] / total);
+    return {
+      mark: mark,
+      at: function (u) {
+        var d = u * total, i = 1;
+        while (i < len.length - 1 && len[i] < d) i++;
+        var f = (d - len[i - 1]) / ((len[i] - len[i - 1]) || 1), o = {};
+        keys.forEach(function (k) { o[k] = samples[i - 1][k] + (samples[i][k] - samples[i - 1][k]) * f; });
+        return o;
+      }
+    };
+  }
 
   function sparks(x, y, n, o) {
     o = o || {};
     for (var i = 0; i < n; i++) {
       var s = document.createElement("div");
-      s.className = "spark" + (o.cls ? " " + o.cls : "");
+      s.className = "spark";
       s.style.left = x + (o.jx ? rnd(-o.jx, o.jx) : 0) + "px";
       s.style.top = y + (o.jy ? rnd(-o.jy, o.jy) : 0) + "px";
       var ang = (o.angle || 0) + rnd(-0.5, 0.5) * (o.spread != null ? o.spread : Math.PI * 2);
@@ -95,228 +153,252 @@
     }
   }
 
-  function ripple(x, y, scale) {
-    var r = document.createElement("div");
-    r.className = "ripple";
-    r.style.left = x + "px";
-    r.style.top = y + "px";
-    fx.appendChild(r);
-    var a = r.animate([
-      { transform: "scale(0.3)", opacity: 1 },
-      { transform: "scale(" + (scale || 2.2) + ")", opacity: 0 }
-    ], { duration: 550, easing: "ease-out" });
-    a.onfinish = r.remove.bind(r);
-  }
+  // ---------------------------------------------------------------- fan
+  var cards = FAN.map(function (p, i) {
+    var c = document.createElement("div");
+    c.className = "abs card" + (i === HINT ? " hint" : "");
+    c.style.transform = pose(p, BACK_W, BACK_H);
+    // breathing wave: card i peaks a bit before the next one, the hinted card on the hand press
+    var peak = 0.48 - (HINT - i) * 0.07; // fraction of the shared loop
+    c.style.setProperty("--d", ((peak - 0.3) - 1) * 1.6 + "s");
+    c.innerHTML = '<i class="glow"></i><div class="cin"></div>';
+    c.setAttribute("data-i", i);
+    fanEl.appendChild(c);
+    return c;
+  });
 
-  // ---------------------------------------------------------------- hint (idle) state
-  var hintTimer = 0;
   function setIdle(on) {
     stage.classList.toggle("idle", on);
     hand.className = "abs img hand " + (on ? "on" : "off");
   }
-  function scheduleHint() {
-    clearTimeout(hintTimer);
-    hintTimer = setTimeout(function () { if (!ended) setIdle(true); }, 2500);
-  }
 
-  // ---------------------------------------------------------------- game
-  var taps = 0, busy = false, queued = 0, ended = false, started = false, tryTimer = 0;
+  // ---------------------------------------------------------------- pick
+  var started = false, picked = false;
+
+  function toStage(e) {
+    var t = e.touches && e.touches[0] ? e.touches[0] : e;
+    return { x: (t.clientX - view.ox) / view.s, y: (t.clientY - view.oy) / view.s };
+  }
 
   function onPress(e) {
-    if (!started || ended) return;
-    if (e && e.cancelable) e.preventDefault();
-    if (taps + queued >= TAPS) return;
-    if (busy) { queued++; return; }
-    doTap();
-  }
-
-  function doTap() {
-    busy = true;
-    taps++;
-    var k = taps;
-    setIdle(false);
-    scheduleHint();
-
-    animIn(dialHub, [{ transform: "scale(1)" }, { transform: "scale(0.94)" }, { transform: "scale(1)" }], { duration: 220 });
-    animIn(tapText, [{ transform: "scale(1.12)" }, { transform: "scale(1)" }], { duration: 300, easing: EASE_OUT });
-    var left = TAPS - k;
-    label.textContent = left > 0 ? T.tapsLeft + left : T.open;
-    anim(barWrap, [{ width: BAR_W[k - 1] + "px" }, { width: BAR_W[k] + "px" }], { duration: 420, easing: EASE_OUT });
-
-    if (k === 1) failTap(); else okTap(k);
-
-    setTimeout(function () {
-      busy = false;
-      if (taps === TAPS) { openSafe(); return; }
-      if (queued) { queued--; doTap(); }
-    }, k === TAPS ? 850 : k === 1 ? 750 : 600);
-  }
-
-  // The lock jams, the first disc cracks.
-  function failTap() {
-    anim(dialSpr, [
-      { transform: "rotate(0deg)", easing: "ease-out" },
-      { transform: "rotate(70deg)", offset: 0.35, easing: "ease-in" },
-      { transform: "rotate(52deg)", offset: 0.5 },
-      { transform: "rotate(62deg)", offset: 0.6, easing: "ease-in-out" },
-      { transform: "rotate(-8deg)", offset: 0.85 },
-      { transform: "rotate(0deg)" }
-    ], { duration: 750 });
-    animIn(safe, [
-      { transform: "none" },
-      { transform: "translateX(-10px)" }, { transform: "translateX(9px)" },
-      { transform: "translateX(-6px)" }, { transform: "translateX(4px)" },
-      { transform: "none" }
-    ], { duration: 420, delay: 220, easing: "ease-out" });
-    sparks(DIAL.x, DIAL.y, 10, { dist: 160, cls: "dust", delay: 220, dur: 700, gravity: 90 });
-
-    animIn(label, [
-      { transform: "translateX(0)", color: "#ff7a5c" },
-      { transform: "translateX(-12px)", color: "#ff7a5c" }, { transform: "translateX(10px)" },
-      { transform: "translateX(-6px)" }, { transform: "translateX(0)", color: "#ffbb58" }
-    ], { duration: 450, easing: "ease-out" });
-    anim(broken, [
-      { opacity: 0, transform: "scale(0.2) rotate(-90deg)" },
-      { opacity: 1, transform: "scale(1.15) rotate(8deg)", offset: 0.5 },
-      { opacity: 1, transform: "scale(1) rotate(-6deg)", offset: 0.7 },
-      { opacity: 1, transform: "scale(1) rotate(4deg)", offset: 0.85 },
-      { opacity: 1, transform: "scale(1) rotate(0deg)" }
-    ], { duration: 600, delay: 120, easing: "ease-out" });
-    var sx = PANEL.x + SLOT_X[0], sy = PANEL.y + SLOT_Y;
-    sparks(sx, sy, 12, { dist: 130, cls: "dust", delay: 380, dur: 650, gravity: 80 });
-
-    // "Tap to unlock" -> "Try again!" for a moment
-    setGradText(tapText, T.tryAgain);
-    clearTimeout(tryTimer);
-    tryTimer = setTimeout(function () { setGradText(tapText, T.tap); }, 1600);
-  }
-
-  function okTap(k) {
-    clearTimeout(tryTimer);
-    setGradText(tapText, T.tap);
-    anim(dialSpr, [
-      { transform: "rotate(" + DIAL_ANGLE[k - 1] + "deg)" },
-      { transform: "rotate(" + DIAL_ANGLE[k] + "deg)" }
-    ], { duration: k === TAPS ? 900 : 650, easing: EASE_BACK });
-    animIn(safe, [
-      { transform: "none" },
-      { transform: "translate(-6px,2px) rotate(-0.5deg)" },
-      { transform: "translate(5px,-2px) rotate(0.4deg)" },
-      { transform: "translate(-2px,1px) rotate(-0.2deg)" },
-      { transform: "none" }
-    ], { duration: 320, easing: "ease-out" });
-    ripple(DIAL.x, DIAL.y, 2.6);
-    sparks(DIAL.x, DIAL.y, 14, { dist: 230, size: 1.2, dur: 650 });
-    animIn(label, [{ transform: "scale(1.3)", color: "#fff3c4" }, { transform: "scale(1)", color: "#ffbb58" }], { duration: 380, easing: EASE_OUT });
-
-    fillSlot(k - 1, 160);
-    if (k === TAPS) {
-      // the cracked disc is repaired: flash, then it turns into a good one
-      anim(broken, [
-        { opacity: 1, transform: "scale(1)", filter: "brightness(1)" },
-        { opacity: 1, transform: "scale(1.15)", filter: "brightness(2.2)", offset: 0.5 },
-        { opacity: 0, transform: "scale(1.3)", filter: "brightness(3)" }
-      ], { duration: 420, delay: 260, easing: "ease-out" });
-      fillSlot(0, 440);
+    if (!started || picked) return;
+    if (e.cancelable) e.preventDefault();
+    var c = e.target.closest ? e.target.closest(".card") : null;
+    var i;
+    if (c) i = +c.getAttribute("data-i");
+    else { // tap outside the cards: take the nearest one
+      var p = toStage(e), best = 1e9;
+      FAN.forEach(function (f, k) {
+        var d = (f.x - p.x) * (f.x - p.x) + (f.y - p.y) * (f.y - p.y);
+        if (d < best) { best = d; i = k; }
+      });
     }
+    pick(i);
   }
 
-  function fillSlot(i, delay) {
-    anim(coins[i], [
-      { opacity: 0, transform: "scale(0.2) rotate(-90deg)" },
-      { opacity: 1, transform: "scale(1.22) rotate(10deg)", offset: 0.6 },
-      { opacity: 1, transform: "scale(1) rotate(0deg)" }
-    ], { duration: 460, delay: delay, easing: "ease-out" });
-    anim(checks[i], [
-      { opacity: 0, transform: "scale(2.2) rotate(-14deg)" },
-      { opacity: 1, transform: "scale(0.9) rotate(0deg)", offset: 0.7 },
-      { opacity: 1, transform: "scale(1)" }
-    ], { duration: 320, delay: delay + 360, easing: "ease-in" });
-    var sx = PANEL.x + SLOT_X[i], sy = PANEL.y + SLOT_Y;
-    sparks(sx, sy, 12, { dist: 150, delay: delay + 140, dur: 600 });
-    setTimeout(function () { ripple(sx, sy, 1.6); }, delay);
-  }
-
-  function openSafe() {
-    ended = true;
-    clearTimeout(hintTimer);
+  function pick(i) {
+    picked = true;
     setIdle(false);
+    var f = FAN[i];
 
-    // rattle, then the door swings open with a burst of golden light
-    anim(safe, [
-      { transform: "none" },
-      { transform: "translate(-8px,0) rotate(-0.8deg)" },
-      { transform: "translate(8px,0) rotate(0.8deg)" },
-      { transform: "translate(-6px,0) rotate(-0.5deg)" },
-      { transform: "translate(6px,0) rotate(0.5deg)" },
-      { transform: "none" }
-    ], { duration: 420, easing: "ease-in-out" });
+    // the chosen card becomes the hero card, exactly where it was
+    cards[i].style.visibility = "hidden";
+    var start = { x: f.x, y: f.y, r: f.r, sx: BACK_W / HERO_W, sy: BACK_H / HERO_H };
+    var rad = f.r * Math.PI / 180;
+    var lift = { x: f.x + Math.sin(rad) * 70, y: f.y - Math.cos(rad) * 70, r: f.r, sx: start.sx * 1.08, sy: start.sy * 1.08 };
+    hero.style.visibility = "visible";
+    hero.style.transform = pose(start, HERO_W, HERO_H);
+    anim(hero.querySelector(".back .glow"), [{ opacity: 0 }, { opacity: 1, offset: 0.3 }, { opacity: 1, offset: 0.7 }, { opacity: 0 }], { duration: 800 });
 
-    wait(380).then(function () {
-      stage.classList.add("open");
-      anim($("safeOpen"), [{ opacity: 0 }, { opacity: 1 }], { duration: 260 });
-      anim(dial, [{ opacity: 1 }, { opacity: 0 }], { duration: 220 });
-      anim(dialHub, [{ opacity: 1 }, { opacity: 0 }], { duration: 220 });
-      anim(safe, [{ transform: "scale(1)" }, { transform: "scale(1.04)", offset: 0.3 }, { transform: "scale(1)" }], { duration: 650, easing: "ease-out" });
-      anim($("flash"), [{ opacity: 0 }, { opacity: 0.85, offset: 0.2 }, { opacity: 0 }], { duration: 1000, easing: "ease-out" });
-      anim($("doorGlow"), [{ opacity: 0 }, { opacity: 1 }], { duration: 500 });
-      anim($("glowBack"), [{ opacity: 0 }, { opacity: 0.85 }], { duration: 700 });
-      anim($("rays"), [{ opacity: 0 }, { opacity: 0.7 }], { duration: 900 });
-      anim(tapText, [{ opacity: 1 }, { opacity: 0 }], { duration: 300 });
-      // light pouring out of the door gap (left edge) + burst from the lock
-      sparks(232, 900, 34, { jx: 10, jy: 330, angle: Math.PI, spread: 1.6, dist: 260, size: 1.3, dur: 1100, stagger: 500, gravity: -60 });
-      sparks(DIAL.x, DIAL.y, 26, { dist: 420, size: 1.6, dur: 1000 });
-      return wait(1050);
-    }).then(showPopup);
+    // the others drift away and sink into the shadows. Opacity goes on the whole fan as one
+    // layer, so the faded cards don't show through each other.
+    cards.forEach(function (c, k) {
+      if (k === i) return;
+      var p = FAN[k], dir = k < i ? -1 : 1;
+      var away = { x: p.x + dir * 60, y: p.y + 30, r: p.r + dir * 4, sx: 0.94, sy: 0.94 };
+      anim(c, [{ transform: pose(p, BACK_W, BACK_H) }, { transform: pose(away, BACK_W, BACK_H) }], { duration: 420, easing: EASE_OUT });
+    });
+    anim(fanEl, [{ opacity: 1 }, { opacity: 0.35, offset: 0.25 }, { opacity: 0.35, offset: 0.6 }, { opacity: HOLD ? 0.35 : 0.15 }], { duration: PATH_MS, easing: "linear" });
+
+    // One continuous move along a smooth curve: lift -> through the frame-3 pose (where it
+    // flips) -> straight into the final frame-4 pose, with a single ease over the whole length,
+    // so the speed never jumps between the states.
+    var way = HOLD ? [start, lift, REVEAL] : [start, lift, REVEAL, FINAL];
+    var path = curve(way);
+    var dur = HOLD ? PATH_MS * 0.6 : PATH_MS;
+    var frames = [], N = 48, flipAt = 1;
+    for (var k = 0; k <= N; k++) {
+      var t = k / N, e = EASE(t);
+      frames.push({ transform: pose(path.at(e), HERO_W, HERO_H), offset: t });
+    }
+    for (var q = 0; q <= 1000; q++) if (EASE(q / 1000) >= path.mark[2]) { flipAt = q / 1000; break; }
+    anim(hero, frames, { duration: dur, easing: "linear" });
+    heroMove = { path: path, dur: dur, t0: performance.now() }; // the light swirl follows it
+
+    // fast 2D flip on the way, centred on the moment it passes the frame-3 pose
+    setTimeout(function () {
+      var a = anim(flip, [{ transform: "scaleX(1)" }, { transform: "scaleX(0)" }], { duration: 140, easing: "ease-in" });
+      a.onfinish = function () {
+        hero.querySelector(".back").style.visibility = "hidden";
+        hero.querySelector(".front").style.visibility = "visible";
+        anim(flip, [{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], { duration: 200, easing: "ease-out" });
+        reveal();
+      };
+    }, Math.max(0, dur * flipAt - 140));
   }
 
-  function showPopup() {
-    popup.classList.add("show");
+  // ---------------------------------------------------------------- light swirl
+  // A comet of golden light orbiting the card on an ellipse that follows the card's live pose
+  // (position, tilt, size), with a tapering tail and sparks shed from its head. Drawn on a
+  // canvas behind the card, additive blending, ~1.4 s, then the canvas is cleared.
+  var heroMove = null;
+  var swirl = { cv: $("swirl"), ctx: null, k: 1, parts: [], t0: 0, last: 0 };
+  var SWIRL_MS = 1400, TAU = Math.PI * 2;
+  var dot = (function () { // soft glowing particle sprite
+    var c = document.createElement("canvas"), g;
+    c.width = c.height = 64;
+    g = c.getContext("2d").createRadialGradient(32, 32, 0, 32, 32, 32);
+    g.addColorStop(0, "rgba(255,255,245,1)");
+    g.addColorStop(0.25, "rgba(255,230,150,0.9)");
+    g.addColorStop(0.6, "rgba(255,170,50,0.35)");
+    g.addColorStop(1, "rgba(255,140,0,0)");
+    c.getContext("2d").fillStyle = g;
+    c.getContext("2d").fillRect(0, 0, 64, 64);
+    return c;
+  })();
+
+  function heroPose(now) {
+    if (!heroMove) return REVEAL;
+    return heroMove.path.at(EASE(Math.min(1, (now - heroMove.t0) / heroMove.dur)));
+  }
+
+  function swirlStart() {
+    var dpr = window.devicePixelRatio || 1;
+    swirl.k = Math.min(1, view.s * dpr); // device-pixel resolution, never above stage pixels
+    swirl.cv.width = Math.round(W * swirl.k);
+    swirl.cv.height = Math.round(H * swirl.k);
+    swirl.ctx = swirl.cv.getContext("2d");
+    swirl.parts = [];
+    swirl.t0 = swirl.last = performance.now();
+    requestAnimationFrame(swirlFrame);
+  }
+
+  function swirlFrame(now) {
+    var t = (now - swirl.t0) / SWIRL_MS, dt = Math.min(50, now - swirl.last);
+    swirl.last = now;
+    var ctx = swirl.ctx;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, swirl.cv.width, swirl.cv.height);
+    ctx.setTransform(swirl.k, 0, 0, swirl.k, 0, 0);
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = "round";
+
+    var p = heroPose(now), rot = p.r * Math.PI / 180, cos = Math.cos(rot), sin = Math.sin(rot);
+    var rx = HERO_W / 2 * p.sx * 1.42, ry = HERO_H / 2 * p.sy * 1.2;
+    function at(a, off) { // point on the card-aligned ellipse, with a slight organic wobble
+      var w = 1 + (off || 0) + 0.035 * Math.sin(a * 3 + t * 7 + (off || 0) * 40);
+      var ex = Math.cos(a) * rx * w, ey = Math.sin(a) * ry * w;
+      return { x: p.x + ex * cos - ey * sin, y: p.y + ex * sin + ey * cos, a: a };
+    }
+
+    if (t < 1) {
+      var env = t < 0.12 ? t / 0.12 : t > 0.72 ? Math.max(0, (1 - t) / 0.28) : 1;
+      var head = 0.2 * Math.PI + 1.45 * Math.PI * (1 - Math.pow(1 - t, 2.2)); // fast in, eases out; fades upper-left
+      var grow = Math.min(1, t / 0.3) * (t > 0.7 ? Math.max(0.05, (1 - t) / 0.3) : 1);
+      // three strands of light (radius offset, tail length, strength), like the Figma swirl.
+      // Each strand is a dense chain of soft glow sprites (even spacing = smooth band, no beads).
+      [[0, 2.0, 1], [0.075, 1.45, 0.55], [-0.065, 1.1, 0.45]].forEach(function (st, si) {
+        var tail = 0.15 + st[1] * grow, M = 90, core = [];
+        for (var j = 0; j <= M; j++) {
+          var f = 1 - j / M, q = at(head - tail * j / M, st[0]), c = ctx; // f: 1 at the head
+          var g = 150 * st[2] * p.sx * (0.3 + 0.7 * f);
+          c.globalAlpha = 0.16 * st[2] * env * Math.pow(f, 1.2);
+          c.drawImage(dot, q.x - g / 2, q.y - g / 2, g, g);
+          var w = 34 * st[2] * p.sx * (0.25 + 0.75 * f);
+          c.globalAlpha = 0.36 * env * Math.pow(f, 1.4);
+          c.drawImage(dot, q.x - w / 2, q.y - w / 2, w, w);
+          if (si === 0 && j <= M * 0.6) core.push(q);
+        }
+        // thin white-hot thread along the main strand
+        if (si === 0) {
+          ctx.globalAlpha = 0.55 * env;
+          ctx.strokeStyle = "rgb(255,250,232)";
+          ctx.lineWidth = 4 * p.sx;
+          ctx.beginPath();
+          core.forEach(function (q, n) { if (n) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      });
+      var h0 = at(head, 0), h1 = at(head - 0.06, 0);
+      var hs = 170 * p.sx * env; // bright core at the head
+      ctx.globalAlpha = env;
+      ctx.drawImage(dot, h0.x - hs / 2, h0.y - hs / 2, hs, hs);
+      ctx.globalAlpha = 1;
+      // sparks shed from the head, thrown along its direction of travel
+      var n = Math.round(5 * env + Math.random());
+      for (var e = 0; e < n; e++) {
+        var tx = h0.x - h1.x, ty = h0.y - h1.y, tl = Math.hypot(tx, ty) || 1;
+        var sp = rnd(0.04, 0.26);
+        swirl.parts.push({
+          x: h0.x + rnd(-14, 14), y: h0.y + rnd(-14, 14),
+          vx: tx / tl * sp + rnd(-0.07, 0.07), vy: ty / tl * sp + rnd(-0.07, 0.07),
+          life: rnd(450, 1000), age: 0, size: rnd(10, 28)
+        });
+      }
+    }
+
+    var i;
+    for (i = swirl.parts.length - 1; i >= 0; i--) {
+      var q = swirl.parts[i];
+      q.age += dt;
+      if (q.age >= q.life) { swirl.parts.splice(i, 1); continue; }
+      q.x += q.vx * dt; q.y += q.vy * dt; q.vy += 0.00012 * dt; q.vx *= 0.985; q.vy *= 0.985;
+      var k = 1 - q.age / q.life, sz = q.size * (0.4 + 0.6 * k);
+      ctx.globalAlpha = 0.85 * k;
+      ctx.drawImage(dot, q.x - sz / 2, q.y - sz / 2, sz, sz);
+    }
+    ctx.globalAlpha = 1;
+
+    if (t < 1 || swirl.parts.length) requestAnimationFrame(swirlFrame);
+    else { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, swirl.cv.width, swirl.cv.height); }
+  }
+
+  // ---------------------------------------------------------------- prize
+  function reveal() {
+    hero.classList.add("won");
+    anim($("flash"), [{ opacity: 0 }, { opacity: 0.7, offset: 0.2 }, { opacity: 0 }], { duration: 800, easing: "ease-out" });
+    // the burst of light on the face is a plain overlay fading out (no filter repaint)
+    anim(hero.querySelector(".burst"), [{ opacity: 1 }, { opacity: 0 }], { duration: 650, easing: "ease-out" });
+    swirlStart(); // the arc of light wraps around the card while it settles
+    sparks(REVEAL.x, REVEAL.y, 26, { dist: 420, size: 1.5, dur: 1000 });
+
+    // "TU BONO: 125 GIROS GRATIS" slides in as the card settles
+    setTimeout(function () {
+      $("plate").style.opacity = 1;
+      animIn($("plate"), [
+        { opacity: 0, transform: "translateY(50px) scale(0.85)" },
+        { opacity: 1, transform: "none" }
+      ], { duration: 420, easing: "cubic-bezier(.2,.9,.3,1.1)" });
+    }, HOLD ? 150 : 380);
+
+    if (!HOLD) setTimeout(finale, 650);
+  }
+
+  function finale() {
+    stage.classList.add("end");
     AD.gameEnd();
-
-    animIn($("popBox"), [
-      { opacity: 0, transform: "scale(0.6)" },
-      { opacity: 0.9, transform: "scale(1.03)", offset: 0.7 },
-      { opacity: 0.9, transform: "scale(1)" }
-    ], { duration: 480, easing: "ease-out" });
-    anim($("popRays"), [{ opacity: 0 }, { opacity: 0.75 }], { duration: 700, delay: 350 });
-    animIn($("popGold"), [
-      { opacity: 0, transform: "translateY(-260px) scale(0.6)" },
-      { opacity: 1, transform: "translateY(18px) scale(1.06)", offset: 0.65 },
+    var btn = $("btn");
+    btn.style.opacity = 1;
+    animIn(btn, [
+      { opacity: 0, transform: "translateY(50px) scale(0.92)" },
       { opacity: 1, transform: "none" }
-    ], { duration: 650, delay: 220, easing: "ease-out" });
-    sparks(530, 664, 22, { dist: 300, size: 1.4, delay: 640, dur: 900 });
-    animIn($("popText"), [
-      { opacity: 0, transform: "scale(0.5)" },
-      { opacity: 1, transform: "scale(1.1)", offset: 0.7 },
-      { opacity: 1, transform: "scale(1)" }
-    ], { duration: 450, delay: 420, easing: "ease-out" });
-    animIn($("popBtn"), [
-      { opacity: 0, transform: "translateY(90px) scale(0.8)" },
-      { opacity: 1, transform: "none" }
-    ], { duration: 480, delay: 800, easing: EASE_BACK });
-
-    // amount counts up
-    var amounts = popup.querySelectorAll(".amount");
-    var target = CFG.bonusAmount, t0 = 0, DUR = 1000;
-    function fmt(v) { return Math.round(v).toLocaleString(CFG.locale); }
-    // size the line for the final value, then count up to it
-    for (var i = 0; i < amounts.length; i++) amounts[i].textContent = fmt(target);
-    fitText($("popText"));
-    for (i = 0; i < amounts.length; i++) amounts[i].textContent = fmt(0);
-    function step(t) {
-      if (!t0) t0 = t;
-      var p = Math.min(1, (t - t0) / DUR);
-      var e = 1 - Math.pow(1 - p, 3);
-      for (var i = 0; i < amounts.length; i++) amounts[i].textContent = fmt(target * e);
-      if (p < 1) requestAnimationFrame(step);
-    }
-    setTimeout(function () { requestAnimationFrame(step); }, 550);
-
+    ], { duration: 420, easing: "cubic-bezier(.2,.9,.3,1.12)" });
+    sparks(FINAL.x, FINAL.y, 18, { dist: 380, size: 1.3, delay: 150, dur: 900 });
     setTimeout(function () {
-      popup.classList.add("cta");
-      popHand.className = "abs img hand on";
-    }, 1400);
+      stage.classList.add("cta");
+      hand.className = "abs img hand final on";
+    }, 500);
   }
 
   function onCta(e) {
@@ -330,15 +412,15 @@
     stage.addEventListener("touchstart", onPress, { passive: false });
     stage.addEventListener("mousedown", onPress);
   }
-  $("popBtn").addEventListener("click", onCta);
-  $("popGold").addEventListener("click", onCta);
-  $("popBox").addEventListener("click", onCta);
+  $("btn").addEventListener("click", onCta);
+  $("plate").addEventListener("click", onCta);
 
   function start() {
     if (started) return;
     started = true;
     fit();
     Array.prototype.forEach.call(gts, fitText); // re-measure with the web font loaded
+    fitted.forEach(fitText);
     stage.classList.remove("loading");
     setIdle(true);
     AD.gameReady();
@@ -351,10 +433,15 @@
     setTimeout(start, 2500); // never get stuck on a slow font load
   });
 
-  // debug hook for QA: ?state=1..3 or ?state=popup
-  var m = /[?&]state=(\w+)/.exec(location.search);
-  if (m) setTimeout(function () {
-    var n = m[1] === "popup" ? TAPS : parseInt(m[1], 10) || 0;
-    (function next() { if (taps < n) { if (!busy) doTap(); setTimeout(next, 120); } })();
-  }, 400);
+  // QA hooks: ?pick=0..4 picks that card automatically, &hold=1 stops on the revealed card
+  var m = /[?&]pick=(\d)/.exec(location.search);
+  if (m) setTimeout(function () { if (started && !picked) pick(+m[1] % 5); }, 900);
+  // QA: window.__swirlAt(0..1) draws one frame of the light swirl at that moment of its life
+  if (m) window.__swirlAt = function (t) {
+    if (!swirl.ctx) swirlStart();
+    var now = performance.now();
+    swirl.t0 = now - t * SWIRL_MS;
+    swirl.last = now - 16;
+    swirlFrame(now);
+  };
 })();

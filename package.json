@@ -1,7 +1,7 @@
 {
-  "name": "jugabet-safe-playable",
+  "name": "jugabet-cards-playable",
   "version": "1.0.0",
-  "description": "JugaBet Safe Cracking playable ad",
+  "description": "JugaBet Fan of Cards playable ad",
   "scripts": {
     "build": "node tools/build.mjs",
     "assets": "python tools/prepare_assets.py",
