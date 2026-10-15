@@ -13,6 +13,9 @@
     { x: 802.8, y: 949.8, r: 15.88 }
   ];
   var HINT = 4; // the hand points at the right-most card
+  // mouse hover on a card (like Figma state 2): lift along the card's own axis + green glow, see CSS
+  var HOVER = window.matchMedia ? matchMedia("(hover: hover) and (pointer: fine)") : { matches: false };
+  var HOVER_LIFT = 48, HOVER_SCALE = 1;
   var BACK_W = 397, BACK_H = 541.4; // visible card back in the fan
   var HERO_W = 507, HERO_H = 674; // upright card front (its native size = Figma frame 3)
   // Chosen card poses: frame 3 (revealed, tilted) and frame 4 (final, upright, bigger)
@@ -161,8 +164,11 @@
     // breathing wave: card i peaks a bit before the next one, the hinted card on the hand press
     var peak = 0.48 - (HINT - i) * 0.07; // fraction of the shared loop
     c.style.setProperty("--d", ((peak - 0.3) - 1) * 1.6 + "s");
-    c.innerHTML = '<i class="glow"></i><div class="cin"></div>';
+    c.innerHTML = '<div class="lift"><i class="glow"></i><div class="cin"></div></div>';
     c.setAttribute("data-i", i);
+    // while the mouse is on a card the hint (hand + glowing right card) steps aside
+    c.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse") stage.classList.add("hovering"); });
+    c.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse") stage.classList.remove("hovering"); });
     fanEl.appendChild(c);
     return c;
   });
@@ -205,10 +211,18 @@
     cards[i].style.visibility = "hidden";
     var start = { x: f.x, y: f.y, r: f.r, sx: BACK_W / HERO_W, sy: BACK_H / HERO_H };
     var rad = f.r * Math.PI / 180;
+    // picked while hovered (mouse): start from the raised, glowing hover pose, not the fan pose
+    var hovered = HOVER.matches && cards[i].matches(":hover");
+    if (hovered) {
+      start.x += Math.sin(rad) * HOVER_LIFT;
+      start.y -= Math.cos(rad) * HOVER_LIFT;
+      start.sx *= HOVER_SCALE;
+      start.sy *= HOVER_SCALE;
+    }
     var lift = { x: f.x + Math.sin(rad) * 70, y: f.y - Math.cos(rad) * 70, r: f.r, sx: start.sx * 1.08, sy: start.sy * 1.08 };
     hero.style.visibility = "visible";
     hero.style.transform = pose(start, HERO_W, HERO_H);
-    anim(hero.querySelector(".back .glow"), [{ opacity: 0 }, { opacity: 1, offset: 0.3 }, { opacity: 1, offset: 0.7 }, { opacity: 0 }], { duration: 800 });
+    anim(hero.querySelector(".back .glow"), [{ opacity: hovered ? 1 : 0 }, { opacity: 1, offset: 0.3 }, { opacity: 1, offset: 0.7 }, { opacity: 0 }], { duration: 800 });
 
     // the others drift away and sink into the shadows. Opacity goes on the whole fan as one
     // layer, so the faded cards don't show through each other.

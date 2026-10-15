@@ -73,6 +73,19 @@ html, body {
 .idle .card.hint .cin { animation-name: hintPress; }
 .idle .card.hint .glow { animation: glowHint var(--tap) ease-out infinite; }
 
+/* hover (mouse only, before a card is picked): the card keeps its place in the fan and gently
+   slides up along its own axis, peeking over the arc of cards, with the green glow of Figma state 2. Lives on .lift so it doesn't fight the breathing on .cin;
+   :hover is tested on the static .card box, so the rising picture can't flicker the hover. */
+.card .lift { position: absolute; left: 0; top: 0; width: 100%; height: 100%; transition: transform 0.45s cubic-bezier(.25,.8,.35,1); }
+.card .glow { transition: opacity 0.4s ease; }
+@media (hover: hover) and (pointer: fine) {
+  .idle .card:hover .lift { transform: translateY(-48px); }
+  .idle .card:hover .glow { opacity: 1; animation: none; }
+  .idle.hovering .card.hint:not(:hover) .glow { animation: none; opacity: 0; }
+  .idle.hovering .card.hint:not(:hover) .cin { animation-name: breathe; }
+  .idle.hovering #hand { opacity: 0; transition: opacity 0.2s; }
+}
+
 /* ---------- chosen card ---------- */
 #hero { left: 0; top: 0; width: 507px; height: 674px; transform-origin: 50% 50%; visibility: hidden; pointer-events: none; }
 #hero .flip { transform-origin: 50% 50%; }
@@ -110,9 +123,9 @@ html, body {
   opacity: 0.5; will-change: opacity;
 }
 #hero.won .sun::after { animation: sunPulse 1.6s ease-in-out infinite; }
-.gt.card { left: 0; width: 100%; text-transform: uppercase; z-index: 1; }
-.gt.card .s { color: #6b3006; -webkit-text-stroke: 9px #6b3006; text-shadow: 0 7px 0 #4e2204, 0 12px 20px rgba(0, 0, 0, 0.55); }
-.gt.card .f { background-image: linear-gradient(180deg, #fff7c8 0%, #ffe08a 40%, #f2ad55 72%, #d0812f 100%); }
+.gt.ctext { left: 0; width: 100%; text-transform: uppercase; z-index: 1; }
+.gt.ctext .s { color: #6b3006; -webkit-text-stroke: 9px #6b3006; text-shadow: 0 7px 0 #4e2204, 0 12px 20px rgba(0, 0, 0, 0.55); }
+.gt.ctext .f { background-image: linear-gradient(180deg, #fff7c8 0%, #ffe08a 40%, #f2ad55 72%, #d0812f 100%); }
 .c1 { top: 112px; font-size: 64px; line-height: 1; }
 .c2 { top: 176px; font-size: 172px; line-height: 0.92; }
 .c3 { top: 352px; font-size: 70px; line-height: 0.98; }
