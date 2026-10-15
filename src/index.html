@@ -14,10 +14,13 @@
   <div id="darkBot" class="abs"></div>
 
   <div id="logo" class="abs img"></div>
-  <div id="title" class="abs gt" data-html="Saca<br>tu carta"></div>
+  <div id="title" class="abs gt" data-max="1000" data-html="Saca<br>tu carta"></div>
 
   <!-- fan of 5 card backs, built in game.js -->
   <div id="fan" class="abs fill"></div>
+
+  <!-- three result slots under the fan: each drawn card lands in its slot (built in game.js) -->
+  <div id="pips" class="abs fill"></div>
 
   <!-- golden arc orbiting behind the revealed card (drawn in game.js) -->
   <canvas id="swirl" class="abs"></canvas>
@@ -47,6 +50,7 @@
 
   <div id="btn" class="abs img"><i class="gloss"><i class="shine"></i></i><span id="btnText" data-max="680"><span>Reclamar bono</span></span></div>
 
+  <div id="taps" class="abs"><i></i><i></i></div>
   <div id="hand" class="abs img hand"></div>
   <div id="fx" class="abs fill"></div>
   <div id="flash" class="abs fill"></div>
