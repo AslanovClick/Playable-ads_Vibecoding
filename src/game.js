@@ -4,47 +4,33 @@
   var CFG = window.PLAYABLE_CONFIG, T = CFG.text;
   var W = 1089, H = 1920; // Figma frame
 
-  // Fan of card backs (Figma frame 1): centre and rotation of each card, left to right.
-  var FAN = [
-    { x: 304.1, y: 952.4, r: -24.12 },
-    { x: 432.0, y: 919.9, r: -14.12 },
-    { x: 534.5, y: 917.4, r: -4.12 },
-    { x: 655.0, y: 907.4, r: 5.88 },
-    { x: 802.8, y: 949.8, r: 15.88 }
+  // Weapons: crop box of each sprite in its Figma asset frame, and where the grip end and the
+  // head tip are inside the sprite (fractions, printed by tools/prepare_assets.py).
+  var WEAPONS = [
+    { cls: "bat", frame: [1271, 1237], box: [174, 59, 1175, 1154], grip: [0.030, 0.953], tip: [0.948, 0.037] },
+    { cls: "golf", frame: [1254, 1254], box: [102, 36, 1151, 1203], grip: [0.019, 0.981], tip: [0.909, 0.018] },
+    { cls: "hammer", frame: [1254, 1254], box: [153, 36, 1167, 1171], grip: [0.029, 0.955], tip: [0.782, 0.121] }
   ];
-  var HINT = 4; // the hand points at the right-most card
-  // mouse hover on a card (like Figma state 2): lift along the card's own axis + green glow, see CSS
-  var HOVER = window.matchMedia ? matchMedia("(hover: hover) and (pointer: fine)") : { matches: false };
-  var HOVER_LIFT = 48, HOVER_SCALE = 1;
-  var BACK_W = 397, BACK_H = 541.4; // visible card back in the fan
-  var HERO_W = 507, HERO_H = 674; // upright card front (its native size = Figma frame 3)
-  // Chosen card poses: frame 3 (revealed, tilted) and frame 4 (final, upright, bigger)
-  var REVEAL = { x: 577.5, y: 993.5, r: 11.38, sx: 1, sy: 1 };
-  var FINAL = { x: 544.7, y: 897.3, r: 0, sx: 1.2013, sy: 1.2013 };
+  // In hand (Figma frames 3-5): the asset frame is 557 px wide, centred here, turned -15deg.
+  var HELD = { cx: 169.2, cy: 1034.8, w: 557, r: -15 };
+  var HOLD_AT = 0.14; // the hands hold it this far along from the grip end: the swing pivot
+  // Weapon panel: slot origins (stage px) and each sprite's box inside its slot (style.css)
+  var PICK = [{ x: 138, y: 1395 }, { x: 421.5, y: 1395 }, { x: 705, y: 1395 }];
+  var IN_SLOT = [[12, -29, 255.5, 280], [13, -35, 251, 280], [13, -18, 241, 270]];
 
-  // Three draws: an empty card, half the prize, then the full prize. Each of the first two
-  // stops in front of the fan (SHOW) and then flies down into its result slot under the fan.
-  var KINDS = ["lose", "half", "win"];
-  var SHOW = [
-    { x: 544.5, y: 940, r: -5, sx: 1, sy: 1 },
-    { x: 544.5, y: 940, r: 5, sx: 1, sy: 1 }
-  ];
-  var PIP_S = 0.3, PIP_Y = 1478, PIP_X = [344.5, 544.5, 744.5]; // result slots (mini cards)
-  var PLATE_C = { x: 544.5, y: 1340 }; // the slots melt into the prize plate here
+  var PINATA = { x: 278.45, y: 418 }; // pinata box (575x831) on the stage
+  // where each strike lands on the pinata (pinata px): the cracks spread from here
+  var HIT_AT = [[325, 400], [318, 430], [300, 520], [300, 560]];
+  var STRIKES = 4;
 
-  var HOLD = /[?&]hold=1/.test(location.search);
-
-  var EASE_OUT = "cubic-bezier(.22,.8,.3,1)";
-  var PATH_MS = 1600; // final pick -> final pose, one continuous move
-  var SHOW_MS = 1000; // pick -> shown in front of the fan (draws 1 and 2)
-  var LOOK_MS = [750, 1000]; // how long the shown card stays before it goes to its slot
-  var TO_SLOT_MS = 680;
+  var HAND_TIP = [59.6, 37.9]; // fingertip inside the hand sprite
+  var TIP_CHOOSE = [298, 1572], TIP_PLAY = [637, 1056], TIP_CTA = [774, 1478];
 
   function $(id) { return document.getElementById(id); }
-  var stage = $("stage"), fanEl = $("fan"), hero = $("hero"), flip = hero.querySelector(".flip");
-  var front = hero.querySelector(".front"), back = hero.querySelector(".back");
-  var halo = hero.querySelector(".halo"), burst = hero.querySelector(".burst");
-  var hand = $("hand"), fx = $("fx"), title = $("title");
+  var stage = $("stage"), scene = $("scene"), swing = $("swing"), pinata = $("pinata");
+  var weapon = $("weapon"), wimg = weapon.querySelector(".wimg"), panel = $("panel");
+  var hand = $("hand"), taps = $("taps"), cta = $("cta"), title = $("title");
+  var picks = Array.prototype.slice.call(panel.querySelectorAll(".pick"));
 
   // ---------------------------------------------------------------- layout
   var view = { s: 1, ox: 0, oy: 0 };
@@ -72,33 +58,14 @@
     var w = inner.offsetWidth;
     if (w > max) el.style.fontSize = parseFloat(getComputedStyle(el).fontSize) * max / w + "px";
   }
-  function lines(s) { return s.split(" ").join("<br>"); } // "giros<br>gratis" on the card
-  var c1 = hero.querySelector(".c1"), c2 = hero.querySelector(".c2"), c3 = hero.querySelector(".c3");
   var amount = CFG.bonusAmount.toLocaleString(CFG.locale);
   title.setAttribute("data-html", T.title);
-  c1.setAttribute("data-html", T.cardTop);
-  c2.setAttribute("data-html", amount);
-  c3.setAttribute("data-html", lines(CFG.bonusUnit));
-  $("plateText").firstElementChild.innerHTML = T.plate + " " + amount + " " + CFG.bonusUnit;
+  $("choose").setAttribute("data-html", T.choose);
+  cta.setAttribute("data-html", T.hits[0]);
+  $("bonus").setAttribute("data-html", T.bonus + "<br><small>" + amount + " " + CFG.bonusUnit + "</small>");
   $("btnText").firstElementChild.innerHTML = T.cta;
   var gts = stage.querySelectorAll(".gt");
   Array.prototype.forEach.call(gts, function (el) { setGradText(el, el.getAttribute("data-html")); });
-  var fitted = [$("plateText"), $("btnText")];
-
-  // The face of the next card to be drawn. It is set while the card is still face down, so
-  // nothing re-renders once it is visible.
-  function setFace(kind) {
-    hero.classList.remove("k-lose", "k-half", "k-win");
-    hero.classList.add("k-" + kind);
-    setGradText(c1, T.cardTop);
-    setGradText(c2, kind === "lose" ? T.loseAmount : kind === "half" ? T.halfAmount : amount);
-    setGradText(c3, lines(kind === "half" ? T.halfUnit : CFG.bonusUnit));
-  }
-  function cloneFace() {
-    var f = front.cloneNode(true);
-    f.style.visibility = ""; // shown or hidden by its slot
-    return f;
-  }
 
   // ---------------------------------------------------------------- helpers
   function anim(el, frames, opt) {
@@ -114,20 +81,9 @@
     a.onfinish = function () { a.cancel(); };
     return a;
   }
-  // drop the script animations left on an element (CSS loops keep running)
-  function stopAnims(el) {
-    if (!el.getAnimations) return;
-    el.getAnimations().forEach(function (a) {
-      if (window.CSSAnimation && a instanceof CSSAnimation) return;
-      if (window.CSSTransition && a instanceof CSSTransition) return;
-      a.cancel();
-    });
-  }
   function rnd(a, b) { return a + Math.random() * (b - a); }
-  function pose(p, w, h) {
-    return "translate(" + (p.x - w / 2) + "px," + (p.y - h / 2) + "px) rotate(" + p.r + "deg) scale(" + (p.sx || 1) + "," + (p.sy || 1) + ")";
-  }
-
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+  function later(ms, f) { return setTimeout(f, ms); }
   // cubic-bezier easing as a function (same curve CSS would use)
   function bezier(x1, y1, x2, y2) {
     function at(a, b, t) { return 3 * a * t * (1 - t) * (1 - t) + 3 * b * t * t * (1 - t) + t * t * t; }
@@ -137,136 +93,197 @@
       return at(y1, y2, t);
     };
   }
-  var EASE = bezier(0.32, 0, 0.18, 1); // gentle start, long soft landing
-  var EASE_IO = bezier(0.5, 0, 0.3, 1); // into a result slot
 
-  // Smooth Catmull-Rom curve through card poses, sampled by length (position, rotation and
-  // scale all count), so it can be walked at an even, eased speed. mark[i] = where pose i is.
-  function curve(pts) {
-    var keys = ["x", "y", "r", "sx", "sy"], samples = [], mark = [0];
-    function get(i) { return pts[Math.max(0, Math.min(pts.length - 1, i))]; }
-    for (var j = 0; j < pts.length - 1; j++) {
-      var p0 = get(j - 1), p1 = get(j), p2 = get(j + 1), p3 = get(j + 2);
-      for (var s = (j ? 1 : 0); s <= 24; s++) {
-        var t = s / 24, o = {};
-        keys.forEach(function (k) {
-          var a = p0[k], b = p1[k], c = p2[k], d = p3[k];
-          o[k] = 0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (3 * b - a - 3 * c + d) * t * t * t);
-        });
-        samples.push(o);
-      }
-    }
-    var len = [0];
-    for (var i = 1; i < samples.length; i++) {
-      var A = samples[i - 1], B = samples[i];
-      len.push(len[i - 1] + Math.sqrt(Math.pow(B.x - A.x, 2) + Math.pow(B.y - A.y, 2) +
-        Math.pow((B.r - A.r) * 4, 2) + Math.pow((B.sx - A.sx) * 400, 2)));
-    }
-    var total = len[len.length - 1];
-    for (j = 1; j < pts.length; j++) mark.push(len[j * 24] / total);
-    return {
-      mark: mark,
-      at: function (u) {
-        var d = u * total, i = 1;
-        while (i < len.length - 1 && len[i] < d) i++;
-        var f = (d - len[i - 1]) / ((len[i] - len[i - 1]) || 1), o = {};
-        keys.forEach(function (k) { o[k] = samples[i - 1][k] + (samples[i][k] - samples[i - 1][k]) * f; });
-        return o;
-      }
-    };
-  }
-  // walk the hero card along a curve with one ease: dense linear keyframes
-  function moveHero(path, dur, ease) {
-    var frames = [], N = 48;
-    for (var k = 0; k <= N; k++) frames.push({ transform: pose(path.at(ease(k / N)), HERO_W, HERO_H), offset: k / N });
-    heroMove = { path: path, dur: dur, t0: performance.now(), ease: ease }; // the light swirl follows it
-    return anim(hero, frames, { duration: dur, easing: "linear" });
-  }
-
-  function sparks(x, y, n, o) {
-    o = o || {};
-    for (var i = 0; i < n; i++) {
-      var s = document.createElement("div");
-      s.className = "spark" + (o.cls ? " " + o.cls : "");
-      s.style.left = x + (o.jx ? rnd(-o.jx, o.jx) : 0) + "px";
-      s.style.top = y + (o.jy ? rnd(-o.jy, o.jy) : 0) + "px";
-      var ang = (o.angle || 0) + rnd(-0.5, 0.5) * (o.spread != null ? o.spread : Math.PI * 2);
-      var d = (o.dist || 170) * rnd(0.45, 1.15);
-      var sc = (o.size || 1) * rnd(0.6, 1.5);
-      var dx = Math.cos(ang) * d, dy = Math.sin(ang) * d + (o.gravity || 40);
-      fx.appendChild(s);
-      var a = s.animate([
-        { transform: "translate(0,0) scale(" + sc + ")", opacity: 1 },
-        { transform: "translate(" + dx + "px," + dy + "px) scale(0)", opacity: 0.3 }
-      ], { duration: (o.dur || 700) * rnd(0.7, 1.3), delay: (o.delay || 0) + rnd(0, o.stagger || 0), easing: "cubic-bezier(.15,.7,.3,1)", fill: "backwards" });
-      a.onfinish = s.remove.bind(s);
-    }
-  }
-
-  function setTitle(h) {
-    var out = anim(title, [{ opacity: 1, transform: "scale(1)" }, { opacity: 0, transform: "scale(0.86)" }], { duration: 170, easing: "ease-in" });
+  function swapText(el, h) {
+    var out = anim(el, [{ opacity: 1, transform: "scale(1)" }, { opacity: 0, transform: "scale(0.8)" }], { duration: 120, easing: "ease-in" });
     out.onfinish = function () {
-      setGradText(title, h);
-      animIn(title, [
-        { opacity: 0, transform: "scale(1.22)" },
+      setGradText(el, h);
+      animIn(el, [
+        { opacity: 0, transform: "scale(1.35)" },
+        { opacity: 1, transform: "scale(0.94)", offset: 0.6 },
         { opacity: 1, transform: "scale(1)" }
-      ], { duration: 420, easing: "cubic-bezier(.2,.9,.3,1.15)" });
+      ], { duration: 420, easing: "ease-out" });
       out.cancel();
     };
   }
 
-  // ---------------------------------------------------------------- fan
-  var cards = FAN.map(function (p, i) {
-    var c = document.createElement("div");
-    c.className = "abs card" + (i === HINT ? " hint" : "");
-    c.style.transform = pose(p, BACK_W, BACK_H);
-    // breathing wave: card i peaks a bit before the next one, the hinted card on the hand press
-    var peak = 0.48 - (HINT - i) * 0.07; // fraction of the shared loop
-    c.style.setProperty("--d", ((peak - 0.3) - 1) * 1.6 + "s");
-    c.innerHTML = '<div class="lift"><i class="glow"></i><div class="cin"></div></div>';
-    c.setAttribute("data-i", i);
-    // while the mouse is on a card the hint (hand + glowing right card) steps aside
-    c.addEventListener("pointerenter", function (e) { if (e.pointerType === "mouse") stage.classList.add("hovering"); });
-    c.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse") stage.classList.remove("hovering"); });
-    fanEl.appendChild(c);
-    return c;
-  });
-
+  function placeHand(tip) {
+    hand.style.left = tip[0] - HAND_TIP[0] + "px";
+    hand.style.top = tip[1] - HAND_TIP[1] + "px";
+    taps.style.left = tip[0] - 6 - 75 + "px"; // centred on the fingertip at the press
+    taps.style.top = tip[1] - 6 - 75 + "px";
+  }
   function setIdle(on) {
     stage.classList.toggle("idle", on);
     hand.className = "abs img hand " + (on ? "on" : "off");
+    taps.className = "abs" + (on ? " on" : "");
   }
 
-  // ---------------------------------------------------------------- result slots
-  var pipsEl = $("pips");
-  var pips = PIP_X.map(function (x, k) {
-    var el = document.createElement("div");
-    el.className = "pip abs" + (k === 0 ? " next" : "");
-    var p = { x: x, y: PIP_Y, r: 0, sx: PIP_S, sy: PIP_S };
-    el.style.transform = pose(p, HERO_W, HERO_H);
-    el.innerHTML = '<i class="glow"></i><div class="pflip abs fill">' +
-      '<div class="pback abs img fill"></div><div class="pres abs fill"></div><div class="pgold abs fill k-win"></div></div>';
-    pipsEl.appendChild(el);
-    return {
-      el: el, p: p, flip: el.querySelector(".pflip"),
-      res: el.querySelector(".pres"), gold: el.querySelector(".pgold")
-    };
+  // ---------------------------------------------------------------- weapon geometry
+  // A weapon is drawn by #weapon, which sits on the swing pivot (the hands) and is turned
+  // around it; the sprite inside is offset so that the pivot is at its origin.
+  var held = null; // { w, h, px, py, P: pivot on the stage, r }
+
+  function rot(x, y, deg) {
+    var a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    return [x * c - y * s, x * s + y * c];
+  }
+  function heldPose(wp) {
+    var k = HELD.w / wp.frame[0];
+    var w = (wp.box[2] - wp.box[0]) * k, h = (wp.box[3] - wp.box[1]) * k;
+    var left = HELD.cx - wp.frame[0] * k / 2 + wp.box[0] * k;
+    var top = HELD.cy - wp.frame[1] * k / 2 + wp.box[1] * k;
+    var fx = wp.grip[0] + (wp.tip[0] - wp.grip[0]) * HOLD_AT, fy = wp.grip[1] + (wp.tip[1] - wp.grip[1]) * HOLD_AT;
+    var px = fx * w, py = fy * h;
+    var d = rot(left + px - HELD.cx, top + py - HELD.cy, HELD.r);
+    return { wp: wp, w: w, h: h, px: px, py: py, P: [HELD.cx + d[0], HELD.cy + d[1]], r: HELD.r };
+  }
+  function wpose(x, y, r, s) {
+    return "translate(" + x + "px," + y + "px) rotate(" + r + "deg) scale(" + (s || 1) + ")";
+  }
+  function heldAt(a) { return wpose(held.P[0], held.P[1], held.r + a); }
+  // a point along the weapon (0 = grip end, 1 = tip) when swung by a degrees
+  function along(f, a) {
+    var wp = held.wp;
+    var x = (wp.grip[0] + (wp.tip[0] - wp.grip[0]) * f) * held.w - held.px;
+    var y = (wp.grip[1] + (wp.tip[1] - wp.grip[1]) * f) * held.h - held.py;
+    var d = rot(x, y, held.r + a);
+    return [held.P[0] + d[0], held.P[1] + d[1]];
+  }
+
+  // ---------------------------------------------------------------- particles (one canvas)
+  var fx = { cv: $("fx"), ctx: null, k: 1, list: [], run: false, last: 0, rain: 0 };
+  function sprite(size, draw) {
+    var c = document.createElement("canvas");
+    c.width = c.height = size;
+    draw(c.getContext("2d"), size);
+    return c;
+  }
+  var DOT = sprite(64, function (g, n) { // soft glow
+    var r = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+    r.addColorStop(0, "rgba(255,255,245,1)");
+    r.addColorStop(0.25, "rgba(255,232,150,0.9)");
+    r.addColorStop(0.6, "rgba(255,170,50,0.35)");
+    r.addColorStop(1, "rgba(255,140,0,0)");
+    g.fillStyle = r;
+    g.fillRect(0, 0, n, n);
   });
+  // Coins cut out of the burst art (tools/prepare_assets.py): one strip of cells, each a coin
+  // seen at its own angle, so the flying coins look like the coins in the picture.
+  var COIN_CELL = 192, COIN_N = 9, COIN_SHEET = new Image();
+  (function () {
+    var m = /url\(["']?([^"')]+)["']?\)/.exec(getComputedStyle(document.documentElement).getPropertyValue("--img-coin"));
+    if (m) COIN_SHEET.src = m[1];
+  })();
+  var PAPER = ["#ff2d55", "#ffd400", "#21d07a", "#ff4fd8", "#1fb6ff", "#ff7a00", "#9b5cff"];
+  var CHIPS = ["#e8121c", "#ff3b2f", "#25b832", "#ffcf1f", "#ff4fd8", "#1d9bf0"]; // pinata colours
 
-  // the drawn card's face goes into slot k (a scaled copy of the hero face)
-  function fillPip(k, kind) {
-    var pp = pips[k];
-    pp.res.className = "pres abs fill k-" + kind;
-    pp.res.innerHTML = "";
-    pp.res.appendChild(cloneFace());
-    pp.el.classList.add("filled");
-    pp.el.classList.remove("next");
-    if (pips[k + 1]) pips[k + 1].el.classList.add("next");
+  function fxStart() {
+    if (!fx.ctx) {
+      var dpr = window.devicePixelRatio || 1;
+      fx.k = Math.min(1, view.s * dpr);
+      fx.cv.width = Math.round(W * fx.k);
+      fx.cv.height = Math.round(H * fx.k);
+      fx.ctx = fx.cv.getContext("2d");
+    }
+    if (!fx.run) { fx.run = true; fx.last = performance.now(); requestAnimationFrame(fxFrame); }
+  }
+  function add(p) { fx.list.push(p); fxStart(); }
+
+  function sparks(x, y, n, o) {
+    o = o || {};
+    for (var i = 0; i < n; i++) {
+      var a = (o.angle || 0) + rnd(-0.5, 0.5) * (o.spread != null ? o.spread : Math.PI * 2), sp = rnd(0.25, 1) * (o.speed || 1.1);
+      add({ t: "spark", x: x + rnd(-8, 8), y: y + rnd(-8, 8), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 0.0016, drag: 0.992, age: 0, life: rnd(350, 750), size: rnd(14, 34) * (o.size || 1) });
+    }
+  }
+  function chips(x, y, n, o) { // paper bits of the pinata
+    o = o || {};
+    for (var i = 0; i < n; i++) {
+      var a = (o.angle || 0) + rnd(-0.5, 0.5) * (o.spread != null ? o.spread : Math.PI * 2), sp = rnd(0.3, 1) * (o.speed || 0.9);
+      add({ t: "paper", x: x + rnd(-15, 15), y: y + rnd(-15, 15), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 0.0022, drag: 0.985,
+        rot: rnd(0, 6.3), vr: rnd(-0.02, 0.02), flip: rnd(0, 6.3), vf: rnd(0.01, 0.03),
+        w: rnd(14, 30) * (o.size || 1), h: rnd(10, 22) * (o.size || 1), c: pick(o.colors || CHIPS), age: 0, life: rnd(700, 1300) });
+    }
+  }
+  // "pop": thrown up and out by the blast; "pour": spilling down out of the opening over a
+  // moment. Coins with a floor land on the cobbles, bounce and settle.
+  function coins(x, y, n, o) {
+    o = o || {};
+    for (var i = 0; i < n; i++) {
+      var pour = o.mode === "pour";
+      var a = pour ? Math.PI / 2 + rnd(-0.95, 0.95) : -Math.PI / 2 + rnd(-1.3, 1.3);
+      var sp = pour ? rnd(0.15, 0.6) : rnd(0.55, 1.25);
+      add({ t: "coin", x: x + rnd(-1, 1) * (o.jx || 50), y: y + rnd(-1, 1) * (o.jy || 50), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 0.0032, drag: 0.997,
+        delay: pour ? rnd(0, o.stagger || 450) : 0, k: Math.floor(rnd(0, COIN_N)), s: rnd(0.42, 0.72) * (o.size || 1),
+        rot: rnd(-0.6, 0.6), vr: rnd(-0.004, 0.004), tumble: rnd(0, 6.3), vt: rnd(0.006, 0.014),
+        floor: o.floor ? rnd(1470, 1620) : 0, bounces: 0, age: 0, life: o.life || 2600 });
+    }
+  }
+  function confettiRain(ms) { fx.rain = performance.now() + ms; fxStart(); }
+
+  function fxFrame(now) {
+    var dt = Math.min(40, now - fx.last), ctx = fx.ctx;
+    fx.last = now;
+    if (fx.rain > now && fx.list.length < 90 && Math.random() < dt / 45) {
+      add({ t: "paper", x: rnd(0, W), y: -30, vx: rnd(-0.05, 0.05), vy: rnd(0.12, 0.22), g: 0, drag: 1, sway: rnd(0, 6.3),
+        rot: rnd(0, 6.3), vr: rnd(-0.004, 0.004), flip: rnd(0, 6.3), vf: rnd(0.006, 0.014),
+        w: rnd(16, 26), h: rnd(10, 16), c: pick(PAPER), age: 0, life: 12000 });
+    }
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, fx.cv.width, fx.cv.height);
+    ctx.setTransform(fx.k, 0, 0, fx.k, 0, 0);
+    for (var i = fx.list.length - 1; i >= 0; i--) {
+      var p = fx.list[i];
+      if (p.delay > 0) { p.delay -= dt; continue; }
+      p.age += dt;
+      if (p.age >= p.life || p.y > H + 80) { fx.list.splice(i, 1); continue; }
+      p.vy += p.g * dt; p.vx *= Math.pow(p.drag, dt / 16); p.vy *= Math.pow(p.drag, dt / 16);
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      var k = p.age / p.life, fade = k > 0.75 ? (1 - k) / 0.25 : 1;
+      if (p.t === "spark") {
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = fade;
+        var s = p.size * (1 - k * 0.6);
+        ctx.drawImage(DOT, p.x - s / 2, p.y - s / 2, s, s);
+        ctx.globalCompositeOperation = "source-over";
+      } else if (p.t === "paper") {
+        if (p.sway != null) p.x += Math.sin(p.age / 400 + p.sway) * 0.25;
+        p.rot += p.vr * dt; p.flip += p.vf * dt;
+        ctx.globalAlpha = fade;
+        ctx.save();
+        ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.scale(1, Math.cos(p.flip));
+        ctx.fillStyle = p.c;
+        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.restore();
+      } else { // coin: tumbles (never edge-on, the art already shows it at an angle) and turns
+        if (p.floor && p.y > p.floor && p.vy > 0) { // lands on the cobbles
+          p.y = p.floor;
+          if (p.bounces++ < 2) { p.vy *= -0.32; p.vx *= 0.55; p.vr *= 0.5; }
+          else { p.vy = 0; p.g = 0; p.vx *= 0.5; p.vt *= 0.5; }
+        }
+        p.rot += p.vr * dt; p.tumble += p.vt * dt;
+        var face = Math.cos(p.tumble), sx = 0.62 + 0.38 * Math.abs(face);
+        ctx.globalAlpha = fade;
+        ctx.save();
+        ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.scale(sx * p.s, p.s);
+        if (COIN_SHEET.complete && COIN_SHEET.naturalWidth) ctx.drawImage(COIN_SHEET, p.k * COIN_CELL, 0, COIN_CELL, COIN_CELL, -COIN_CELL / 2, -COIN_CELL / 2, COIN_CELL, COIN_CELL);
+        if (face > 0.9) { // a glint as it turns to face the light
+          ctx.globalCompositeOperation = "lighter";
+          ctx.globalAlpha = fade * (face - 0.9) * 10;
+          ctx.drawImage(DOT, -COIN_CELL * 0.3, -COIN_CELL * 0.32, COIN_CELL * 0.4, COIN_CELL * 0.4);
+          ctx.globalCompositeOperation = "source-over";
+        }
+        ctx.restore();
+      }
+    }
+    ctx.globalAlpha = 1;
+    if (fx.list.length || fx.rain > now) requestAnimationFrame(fxFrame);
+    else { fx.run = false; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, fx.cv.width, fx.cv.height); }
   }
 
-  // ---------------------------------------------------------------- pick
-  var started = false, busy = true, round = 0;
-  var fanAnim = null, away = [];
+  // ---------------------------------------------------------------- 1. choose a weapon
+  var state = "wait", strikes = 0, busy = false, queued = false;
 
   function toStage(e) {
     var t = e.touches && e.touches[0] ? e.touches[0] : e;
@@ -274,349 +291,223 @@
   }
 
   function onPress(e) {
-    if (!started || busy) return;
     if (e.cancelable) e.preventDefault();
-    var c = e.target.closest ? e.target.closest(".card") : null;
-    var i;
-    if (c) i = +c.getAttribute("data-i");
-    else { // tap outside the cards: take the nearest one
-      var p = toStage(e), best = 1e9;
-      FAN.forEach(function (f, k) {
-        var d = (f.x - p.x) * (f.x - p.x) + (f.y - p.y) * (f.y - p.y);
-        if (d < best) { best = d; i = k; }
-      });
+    if (state === "choose") {
+      var el = e.target.closest ? e.target.closest(".pick") : null, i = 0;
+      if (el) i = +el.getAttribute("data-w");
+      else { // anywhere else: the slot nearest to the tap
+        var p = toStage(e), best = 1e9;
+        PICK.forEach(function (s, k) { var d = Math.abs(s.x + 123 - p.x); if (d < best) { best = d; i = k; } });
+      }
+      choose(i);
+    } else if (state === "play") {
+      if (busy) queued = true;
+      else strike();
     }
-    pick(i);
   }
 
-  function pick(i) {
+  function choose(i) {
+    state = "arming";
+    setIdle(false);
+    stage.classList.remove("choosing");
+    var el = picks[i], icon = el.querySelector(".w");
+    el.classList.add("on");
+    animIn(icon, [{ transform: "scale(1)" }, { transform: "scale(1.22) rotate(-6deg)", offset: 0.4 }, { transform: "scale(1)" }], { duration: 420, easing: "ease-out" });
+    sparks(PICK[i].x + 123, PICK[i].y + 123, 16, { speed: 0.7, size: 0.9 });
+
+    // the weapon leaves its slot and flies up into the hands at the left
+    var wp = WEAPONS[i];
+    held = heldPose(wp);
+    dressWeapon(wp);
+    var b = IN_SLOT[i], s = b[2] / held.w;
+    var from = [PICK[i].x + b[0] + held.px * s, PICK[i].y + b[1] + held.py * s];
+    later(FLY_AT, function () {
+      icon.style.visibility = "hidden"; // the flying weapon takes its place exactly
+      // the selection glow of the slot hands over to the glow the weapon carries with it
+      anim(el.querySelector(".dust"), [{ opacity: 1 }, { opacity: 0 }], { duration: 260 });
+      anim(el.querySelector(".frameGold"), [{ opacity: 1 }, { opacity: 0 }], { duration: 260 });
+      stage.classList.add("armed");
+      fly(from, s, FLY_MS);
+      later(140, function () {
+        panel.classList.add("gone");
+        $("choose").classList.add("gone");
+      });
+    });
+    later(FLY_AT + FLY_MS - 120, function () {
+      cta.style.opacity = 1;
+      animIn(cta, [{ opacity: 0, transform: "translateY(40px) scale(0.85)" }, { opacity: 1, transform: "none" }], { duration: 420, easing: "cubic-bezier(.2,.9,.3,1.15)" });
+    });
+    later(FLY_AT + FLY_MS + 60, function () {
+      placeHand(TIP_PLAY);
+      state = "play";
+      setIdle(true);
+      auto();
+    });
+  }
+
+  // The weapon sprite and its glow (soft light behind it, golden dust) are one group that sits
+  // on the swing pivot, so the glow moves, turns and scales with the weapon. The glow is placed
+  // where Figma has it around the held bat.
+  var GLOW_LIGHT = { x: 185, y: 1026.5, r: 24.68 }, GLOW_DUST = { x: 224.5, y: 929, r: -75 };
+  function dressWeapon(wp) {
+    wimg.className = "wimg abs img " + wp.cls;
+    wimg.style.cssText = "left:" + -held.px + "px;top:" + -held.py + "px;width:" + held.w + "px;height:" + held.h + "px";
+    [[".wlight", GLOW_LIGHT, 528, 998], [".wdust", GLOW_DUST, 420, 280]].forEach(function (g) {
+      var d = rot(g[1].x - held.P[0], g[1].y - held.P[1], -held.r);
+      weapon.querySelector(g[0]).style.cssText = "left:" + (d[0] - g[2] / 2) + "px;top:" + (d[1] - g[3] / 2) + "px;" +
+        "transform:rotate(" + (g[1].r - held.r) + "deg)";
+    });
+  }
+
+  // One smooth flight along a curve: up and over to the left, turning into the held angle and
+  // growing to full size, with a single ease over the whole way and a small settle at the end.
+  var FLY_AT = 420, FLY_MS = 820, FLY_EASE = bezier(0.42, 0, 0.2, 1); // starts when the pick pop ends
+  function fly(from, s0, dur) {
+    var to = held.P, c = [(from[0] + to[0]) / 2 - 30, Math.min(from[1], to[1]) - 260];
+    var frames = [], N = 36;
+    for (var k = 0; k <= N; k++) {
+      var t = FLY_EASE(k / N), u = 1 - t;
+      var x = u * u * from[0] + 2 * u * t * c[0] + t * t * to[0];
+      var y = u * u * from[1] + 2 * u * t * c[1] + t * t * to[1];
+      var r = held.r * t - 14 * Math.sin(Math.PI * t); // leans back a little on the way
+      var sc = s0 + (1 - s0) * t + 0.07 * Math.sin(Math.PI * Math.min(1, t * 1.15)); // swells, then settles
+      frames.push({ transform: wpose(x, y, r, sc), offset: k / N });
+    }
+    weapon.style.transform = frames[0].transform; // already in the slot on the very first frame
+    weapon.style.visibility = "visible";
+    anim(weapon, frames, { duration: dur, easing: "linear" });
+    [".wlight", ".wdust"].forEach(function (g) { // the glow fades in as the slot's glow fades out
+      animIn(weapon.querySelector(g), [{ opacity: 0 }, { opacity: 1 }], { duration: dur * 0.6, easing: "ease-out" });
+    });
+    later(dur - 40, function () { sparks(to[0] + 70, to[1] - 200, 14, { speed: 0.6, size: 0.8 }); });
+  }
+
+  // ---------------------------------------------------------------- 2. strikes
+  var SWING_MS = 520, IMPACT = 0.42, SWING = 25; // swing duration, impact moment, swing angle
+  var clipOK = window.CSS && CSS.supports && CSS.supports("clip-path", "circle(1px at 1px 1px)");
+
+  function strike() {
     busy = true;
     setIdle(false);
-    var kind = KINDS[round], last = kind === "win";
-    var f = FAN[i];
-
-    // the chosen card becomes the hero card, exactly where it was
-    cards[i].style.visibility = "hidden";
-    var start = { x: f.x, y: f.y, r: f.r, sx: BACK_W / HERO_W, sy: BACK_H / HERO_H };
-    var rad = f.r * Math.PI / 180;
-    // picked while hovered (mouse): start from the raised, glowing hover pose, not the fan pose
-    var hovered = HOVER.matches && cards[i].matches(":hover");
-    if (hovered) {
-      start.x += Math.sin(rad) * HOVER_LIFT;
-      start.y -= Math.cos(rad) * HOVER_LIFT;
-      start.sx *= HOVER_SCALE;
-      start.sy *= HOVER_SCALE;
-    }
-    var lift = { x: f.x + Math.sin(rad) * 70, y: f.y - Math.cos(rad) * 70, r: f.r, sx: start.sx * 1.08, sy: start.sy * 1.08 };
-    hero.style.visibility = "visible";
-    hero.style.transform = pose(start, HERO_W, HERO_H);
-    anim(back.querySelector(".glow"), [{ opacity: hovered ? 1 : 0 }, { opacity: 1, offset: 0.3 }, { opacity: 1, offset: 0.7 }, { opacity: 0 }], { duration: 800 });
-
-    // the others drift away and sink into the shadows. Opacity goes on the whole fan as one
-    // layer, so the faded cards don't show through each other.
-    away = cards.map(function (c, k) {
-      if (k === i) return null;
-      var p = FAN[k], dir = k < i ? -1 : 1;
-      var to = { x: p.x + dir * 60, y: p.y + 30, r: p.r + dir * 4, sx: 0.94, sy: 0.94 };
-      return { to: to, a: anim(c, [{ transform: pose(p, BACK_W, BACK_H) }, { transform: pose(to, BACK_W, BACK_H) }], { duration: 420, easing: EASE_OUT }) };
-    });
-    var dim = last && !HOLD ? 0.15 : 0.35;
-    fanAnim = anim(fanEl, [{ opacity: 1 }, { opacity: 0.35, offset: 0.25 }, { opacity: 0.35, offset: 0.6 }, { opacity: dim }], { duration: last ? PATH_MS : SHOW_MS, easing: "linear" });
-
-    // One continuous move along a smooth curve: lift -> (draws 1-2) to the show pose, or
-    // (last draw) through the frame-3 pose where it flips straight into the final frame-4 pose,
-    // with a single ease over the whole length, so the speed never jumps between the states.
-    var way, dur, flipMark;
-    if (last) {
-      way = HOLD ? [start, lift, REVEAL] : [start, lift, REVEAL, FINAL];
-      dur = HOLD ? PATH_MS * 0.6 : PATH_MS;
-    } else {
-      way = [start, lift, SHOW[round]];
-      dur = SHOW_MS;
-    }
-    var path = curve(way);
-    flipMark = last ? path.mark[2] : path.mark[1] + (1 - path.mark[1]) * 0.72;
-    var flipAt = 1;
-    for (var q = 0; q <= 1000; q++) if (EASE(q / 1000) >= flipMark) { flipAt = q / 1000; break; }
-    moveHero(path, dur, EASE);
-
-    // fast 2D flip on the way, centred on the moment it passes the flip point
-    setTimeout(function () {
-      var a = anim(flip, [{ transform: "scaleX(1)" }, { transform: "scaleX(0)" }], { duration: 140, easing: "ease-in" });
-      a.onfinish = function () {
-        back.style.visibility = "hidden";
-        front.style.visibility = "visible";
-        var o = anim(flip, [{ transform: "scaleX(0)" }, { transform: "scaleX(1)" }], { duration: 200, easing: "ease-out" });
-        reveal(kind, i, o);
-      };
-    }, Math.max(0, dur * flipAt - 140));
-  }
-
-  // ---------------------------------------------------------------- light swirl
-  // A comet of golden light orbiting the card on an ellipse that follows the card's live pose
-  // (position, tilt, size), with a tapering tail and sparks shed from its head. Drawn on a
-  // canvas behind the card, additive blending, ~1.4 s, then the canvas is cleared.
-  var heroMove = null;
-  var swirl = { cv: $("swirl"), ctx: null, k: 1, parts: [], t0: 0, last: 0 };
-  var SWIRL_MS = 1400, TAU = Math.PI * 2;
-  var dot = (function () { // soft glowing particle sprite
-    var c = document.createElement("canvas"), g;
-    c.width = c.height = 64;
-    g = c.getContext("2d").createRadialGradient(32, 32, 0, 32, 32, 32);
-    g.addColorStop(0, "rgba(255,255,245,1)");
-    g.addColorStop(0.25, "rgba(255,230,150,0.9)");
-    g.addColorStop(0.6, "rgba(255,170,50,0.35)");
-    g.addColorStop(1, "rgba(255,140,0,0)");
-    c.getContext("2d").fillStyle = g;
-    c.getContext("2d").fillRect(0, 0, 64, 64);
-    return c;
-  })();
-
-  function heroPose(now) {
-    if (!heroMove) return REVEAL;
-    return heroMove.path.at(heroMove.ease(Math.min(1, (now - heroMove.t0) / heroMove.dur)));
-  }
-
-  function swirlStart() {
-    var dpr = window.devicePixelRatio || 1;
-    swirl.k = Math.min(1, view.s * dpr); // device-pixel resolution, never above stage pixels
-    swirl.cv.width = Math.round(W * swirl.k);
-    swirl.cv.height = Math.round(H * swirl.k);
-    swirl.ctx = swirl.cv.getContext("2d");
-    swirl.parts = [];
-    swirl.t0 = swirl.last = performance.now();
-    requestAnimationFrame(swirlFrame);
-  }
-
-  function swirlFrame(now) {
-    var t = (now - swirl.t0) / SWIRL_MS, dt = Math.min(50, now - swirl.last);
-    swirl.last = now;
-    var ctx = swirl.ctx;
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, swirl.cv.width, swirl.cv.height);
-    ctx.setTransform(swirl.k, 0, 0, swirl.k, 0, 0);
-    ctx.globalCompositeOperation = "lighter";
-    ctx.lineCap = "round";
-
-    var p = heroPose(now), rot = p.r * Math.PI / 180, cos = Math.cos(rot), sin = Math.sin(rot);
-    var rx = HERO_W / 2 * p.sx * 1.42, ry = HERO_H / 2 * p.sy * 1.2;
-    function at(a, off) { // point on the card-aligned ellipse, with a slight organic wobble
-      var w = 1 + (off || 0) + 0.035 * Math.sin(a * 3 + t * 7 + (off || 0) * 40);
-      var ex = Math.cos(a) * rx * w, ey = Math.sin(a) * ry * w;
-      return { x: p.x + ex * cos - ey * sin, y: p.y + ex * sin + ey * cos, a: a };
-    }
-
-    if (t < 1) {
-      var env = t < 0.12 ? t / 0.12 : t > 0.72 ? Math.max(0, (1 - t) / 0.28) : 1;
-      var head = 0.2 * Math.PI + 1.45 * Math.PI * (1 - Math.pow(1 - t, 2.2)); // fast in, eases out; fades upper-left
-      var grow = Math.min(1, t / 0.3) * (t > 0.7 ? Math.max(0.05, (1 - t) / 0.3) : 1);
-      // three strands of light (radius offset, tail length, strength), like the Figma swirl.
-      // Each strand is a dense chain of soft glow sprites (even spacing = smooth band, no beads).
-      [[0, 2.0, 1], [0.075, 1.45, 0.55], [-0.065, 1.1, 0.45]].forEach(function (st, si) {
-        var tail = 0.15 + st[1] * grow, M = 90, core = [];
-        for (var j = 0; j <= M; j++) {
-          var f = 1 - j / M, q = at(head - tail * j / M, st[0]), c = ctx; // f: 1 at the head
-          var g = 150 * st[2] * p.sx * (0.3 + 0.7 * f);
-          c.globalAlpha = 0.16 * st[2] * env * Math.pow(f, 1.2);
-          c.drawImage(dot, q.x - g / 2, q.y - g / 2, g, g);
-          var w = 34 * st[2] * p.sx * (0.25 + 0.75 * f);
-          c.globalAlpha = 0.36 * env * Math.pow(f, 1.4);
-          c.drawImage(dot, q.x - w / 2, q.y - w / 2, w, w);
-          if (si === 0 && j <= M * 0.6) core.push(q);
-        }
-        // thin white-hot thread along the main strand
-        if (si === 0) {
-          ctx.globalAlpha = 0.55 * env;
-          ctx.strokeStyle = "rgb(255,250,232)";
-          ctx.lineWidth = 4 * p.sx;
-          ctx.beginPath();
-          core.forEach(function (q, n) { if (n) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); });
-          ctx.stroke();
-        }
-        ctx.globalAlpha = 1;
-      });
-      var h0 = at(head, 0), h1 = at(head - 0.06, 0);
-      var hs = 170 * p.sx * env; // bright core at the head
-      ctx.globalAlpha = env;
-      ctx.drawImage(dot, h0.x - hs / 2, h0.y - hs / 2, hs, hs);
-      ctx.globalAlpha = 1;
-      // sparks shed from the head, thrown along its direction of travel
-      var n = Math.round(5 * env + Math.random());
-      for (var e = 0; e < n; e++) {
-        var tx = h0.x - h1.x, ty = h0.y - h1.y, tl = Math.hypot(tx, ty) || 1;
-        var sp = rnd(0.04, 0.26);
-        swirl.parts.push({
-          x: h0.x + rnd(-14, 14), y: h0.y + rnd(-14, 14),
-          vx: tx / tl * sp + rnd(-0.07, 0.07), vy: ty / tl * sp + rnd(-0.07, 0.07),
-          life: rnd(450, 1000), age: 0, size: rnd(10, 28)
-        });
-      }
-    }
-
-    var i;
-    for (i = swirl.parts.length - 1; i >= 0; i--) {
-      var q = swirl.parts[i];
-      q.age += dt;
-      if (q.age >= q.life) { swirl.parts.splice(i, 1); continue; }
-      q.x += q.vx * dt; q.y += q.vy * dt; q.vy += 0.00012 * dt; q.vx *= 0.985; q.vy *= 0.985;
-      var k = 1 - q.age / q.life, sz = q.size * (0.4 + 0.6 * k);
-      ctx.globalAlpha = 0.85 * k;
-      ctx.drawImage(dot, q.x - sz / 2, q.y - sz / 2, sz, sz);
-    }
-    ctx.globalAlpha = 1;
-
-    if (t < 1 || swirl.parts.length) requestAnimationFrame(swirlFrame);
-    else { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, swirl.cv.width, swirl.cv.height); }
-  }
-
-  // ---------------------------------------------------------------- results
-  function reveal(kind, i, opened) {
-    hero.classList.add("shown");
-    var at = kind === "win" ? REVEAL : SHOW[round];
-    if (kind === "lose") {
-      // an empty grey card: a dull knock and some dust, no light
-      opened.onfinish = function () {
-        anim(flip, [
-          { transform: "rotate(0deg)" }, { transform: "rotate(-3.5deg)", offset: 0.25 },
-          { transform: "rotate(2deg)", offset: 0.55 }, { transform: "rotate(0deg)" }
-        ], { duration: 420, easing: "ease-out" });
-      };
-      sparks(at.x, at.y + 200, 14, { cls: "dust", dist: 160, jx: 160, size: 1.3, dur: 900, gravity: 60, angle: -Math.PI / 2, spread: 2.4 });
-      setTitle(T.retry);
-      setTimeout(function () { toSlot(i, kind); }, LOOK_MS[round]);
-      return;
-    }
-
-    // the burst of light on the face is a plain overlay fading out (no filter repaint)
-    anim(burst, [{ opacity: 1 }, { opacity: 0 }], { duration: 650, easing: "ease-out" });
-    if (kind === "half") {
-      // half the prize: real gold, but a smaller celebration that leaves you wanting the rest
-      anim($("flash"), [{ opacity: 0 }, { opacity: 0.35, offset: 0.2 }, { opacity: 0 }], { duration: 700, easing: "ease-out" });
-      sparks(at.x, at.y, 16, { dist: 330, size: 1.2, dur: 900 });
-      setTitle(T.oneMore);
-      setTimeout(function () { toSlot(i, kind); }, LOOK_MS[round]);
-      return;
-    }
-
-    anim($("flash"), [{ opacity: 0 }, { opacity: 0.7, offset: 0.2 }, { opacity: 0 }], { duration: 800, easing: "ease-out" });
-    swirlStart(); // the arc of light wraps around the card while it settles
-    sparks(REVEAL.x, REVEAL.y, 26, { dist: 420, size: 1.5, dur: 1000 });
-    setTitle(T.win);
-    jackpot();
-  }
-
-  // Draws 1-2: the shown card shrinks down into its slot under the fan, while the fan comes
-  // back to life with a fresh card dealt into the gap.
-  function toSlot(i, kind) {
-    var k = round, from = SHOW[k], to = pips[k].p;
-    var lean = to.x < from.x ? -7 : to.x > from.x ? 7 : 0;
-    var mid = { x: from.x + (to.x - from.x) * 0.4, y: from.y + (to.y - from.y) * 0.45, r: lean, sx: 0.62, sy: 0.62 };
-    var a = moveHero(curve([from, mid, to]), TO_SLOT_MS, EASE_IO);
-    anim(halo, [{ opacity: getComputedStyle(halo).opacity }, { opacity: 0 }], { duration: 260 });
-    setTimeout(function () { fanBack(i); }, 120);
-    a.onfinish = function () {
-      fillPip(k, kind);
-      resetHero();
-      animIn(pips[k].flip, [{ transform: "scale(1)" }, { transform: "scale(1.14)", offset: 0.35 }, { transform: "scale(1)" }], { duration: 380, easing: "ease-out" });
-      if (kind === "lose") sparks(to.x, to.y, 8, { cls: "dust", dist: 110, size: 0.9, dur: 700 });
-      else sparks(to.x, to.y, 12, { dist: 170, size: 0.9, dur: 750 });
-      round++;
-      setFace(KINDS[round]);
-      setTimeout(function () {
-        busy = false;
-        setIdle(true);
-        autoPick();
-      }, 120);
-    };
-  }
-
-  function fanBack(i) {
-    var op = getComputedStyle(fanEl).opacity;
-    if (fanAnim) fanAnim.cancel();
-    animIn(fanEl, [{ opacity: op }, { opacity: 1 }], { duration: 520, easing: "ease-out" });
-    cards.forEach(function (c, k) {
-      var p = FAN[k];
-      if (k === i) { // a fresh card is dealt into the gap
-        c.style.visibility = "visible";
-        animIn(c, [
-          { transform: pose({ x: p.x, y: p.y + 150, r: p.r, sx: 0.82, sy: 0.82 }, BACK_W, BACK_H), opacity: 0 },
-          { transform: pose(p, BACK_W, BACK_H), opacity: 1 }
-        ], { duration: 560, delay: 160, easing: "cubic-bezier(.2,.9,.3,1.06)" });
-        return;
-      }
-      var to = away[k].to;
-      away[k].a.cancel();
-      animIn(c, [{ transform: pose(to, BACK_W, BACK_H) }, { transform: pose(p, BACK_W, BACK_H) }], { duration: 520, easing: EASE_OUT });
+    var n = ++strikes;
+    // wind up, swing through, settle back
+    anim(weapon, [
+      { transform: heldAt(0) },
+      { transform: heldAt(-16), offset: 0.24, easing: "cubic-bezier(.4,0,1,1)" },
+      { transform: heldAt(SWING), offset: IMPACT, easing: "ease-out" },
+      { transform: heldAt(SWING - 7), offset: 0.56, easing: "ease-in-out" },
+      { transform: heldAt(0) }
+    ], { duration: SWING_MS, easing: "ease-out" });
+    later(SWING_MS * IMPACT, function () { impact(n); });
+    if (n < STRIKES) later(SWING_MS + 60, function () {
+      busy = false;
+      if (queued) { queued = false; strike(); }
+      else { setIdle(true); auto(); }
     });
   }
 
-  function resetHero() {
-    [hero, flip, halo, burst, back.querySelector(".glow")].forEach(stopAnims);
-    hero.style.visibility = "hidden";
-    back.style.visibility = "";
-    front.style.visibility = "";
-    hero.classList.remove("shown");
-    heroMove = null;
+  function impact(n) {
+    var c = along(0.84, SWING); // where the weapon meets the pinata
+    var h = HIT_AT[n - 1], hx = PINATA.x + h[0], hy = PINATA.y + h[1];
+    var hard = n === STRIKES;
+
+    // the pinata is knocked away from the weapon and swings back on its rope
+    var amp = -(hard ? 9 : 5 + n); // negative: the bottom swings right, away from the weapon
+    anim(swing, [
+      { transform: "rotate(0deg)" }, { transform: "rotate(" + amp + "deg)", offset: 0.18 },
+      { transform: "rotate(" + -amp * 0.55 + "deg)", offset: 0.42 }, { transform: "rotate(" + amp * 0.28 + "deg)", offset: 0.66 },
+      { transform: "rotate(" + -amp * 0.1 + "deg)", offset: 0.85 }, { transform: "rotate(0deg)" }
+    ], { duration: hard ? 1500 : 1250, easing: "ease-out" });
+    animIn(pinata, [{ transform: "scale(1)" }, { transform: "scale(1.06,0.94)", offset: 0.3 }, { transform: "scale(0.98,1.02)", offset: 0.65 }, { transform: "scale(1)" }], { duration: 300 });
+    var j = hard ? 18 : 9;
+    animIn(scene, [
+      { transform: "translate(0,0)" }, { transform: "translate(" + j + "px," + -j * 0.6 + "px)" }, { transform: "translate(" + -j * 0.8 + "px," + j * 0.5 + "px)" },
+      { transform: "translate(" + j * 0.5 + "px," + j * 0.3 + "px)" }, { transform: "translate(0,0)" }
+    ], { duration: hard ? 320 : 220 });
+
+    sparks(c[0], c[1], hard ? 30 : 18, { speed: 1.1 });
+    chips(c[0], c[1], hard ? 0 : 7 + n * 3, { angle: -0.4, spread: 2.6 });
+    if (n < STRIKES) crack(n, h);
+    else burst(hx, hy);
+    if (n < STRIKES) swapText(cta, T.hits[n]);
   }
 
-  // Last draw: all three slots flip over to gold, then melt into the prize plate.
-  function jackpot() {
-    var FLIP0 = 150, STEP = 120;
-    pips.forEach(function (pp, k) {
-      setTimeout(function () {
-        var a = anim(pp.flip, [{ transform: "scaleX(1)" }, { transform: "scaleX(0)" }], { duration: 150, easing: "ease-in" });
-        a.onfinish = function () {
-          pp.el.classList.add("gold");
-          pp.el.classList.remove("next");
-          anim(pp.flip, [
-            { transform: "scale(0, 1)" }, { transform: "scale(1.16, 1.16)", offset: 0.6 }, { transform: "scale(1, 1)" }
-          ], { duration: 380, easing: "ease-out" });
-          a.cancel();
-          sparks(pp.p.x, pp.p.y, 12, { dist: 200, size: 1, dur: 750 });
-        };
-      }, FLIP0 + k * STEP);
+  // a new, bigger crack spreads from the hit point over the previous one, its glow flares up
+  function crack(n, h) {
+    var hot = pinata.querySelector(".hit");
+    hot.style.left = h[0] + "px";
+    hot.style.top = h[1] + "px";
+    anim(hot, [{ opacity: 0, transform: "scale(0.3)" }, { opacity: 1, transform: "scale(1)", offset: 0.25 }, { opacity: 0, transform: "scale(1.5)" }], { duration: 520, easing: "ease-out" });
+
+    var el = pinata.querySelector(".c" + n), prev = pinata.querySelector(".c" + (n - 1));
+    var glow = pinata.querySelector(".g" + n), prevGlow = pinata.querySelector(".g" + (n - 1));
+    el.classList.add("on");
+    var a;
+    if (clipOK) {
+      var at = " at " + h[0] + "px " + h[1] + "px)";
+      a = animIn(el, [{ clipPath: "circle(0px" + at }, { clipPath: "circle(760px" + at }], { duration: 520, easing: "cubic-bezier(.15,.75,.35,1)" });
+    } else a = animIn(el, [{ opacity: 0 }, { opacity: 1 }], { duration: 300 });
+    a.onfinish = function () { a.cancel(); if (prev) prev.classList.remove("on"); };
+
+    glow.classList.add("on");
+    animIn(glow, [{ opacity: 0 }, { opacity: 1, offset: 0.2 }, { opacity: 1, offset: 0.55 }, { opacity: 0.75 }], { duration: 700 });
+    if (prevGlow) {
+      var g = anim(prevGlow, [{ opacity: 0.8 }, { opacity: 0 }], { duration: 400 });
+      g.onfinish = function () { prevGlow.classList.remove("on"); g.cancel(); };
+    }
+  }
+
+  // ---------------------------------------------------------------- 3. burst and prize
+  function burst(hx, hy) {
+    state = "burst";
+    var b = $("burst");
+    anim($("flash"), [{ opacity: 0 }, { opacity: 0.9, offset: 0.15 }, { opacity: 0 }], { duration: 750, easing: "ease-out" });
+    pinata.style.visibility = "hidden";
+    b.style.visibility = "visible";
+    // the burst frame (coins pouring out) stays: it is the last pinata state
+    animIn(b, [{ transform: "scale(0.9)" }, { transform: "scale(1.06)", offset: 0.35 }, { transform: "scale(0.99)", offset: 0.7 }, { transform: "scale(1)" }], { duration: 700, easing: "ease-out" });
+    coins(hx, hy, 16, { floor: true }); // blown out
+    coins(hx, hy + 40, 30, { mode: "pour", floor: true, jx: 70, jy: 40, stagger: 520 }); // spilling out
+    chips(hx, hy, 34, { speed: 1.3, size: 1.3 });
+    chips(hx, hy, 24, { speed: 1.1, colors: PAPER });
+    sparks(hx, hy, 34, { speed: 1.4, size: 1.3 });
+
+    stage.classList.remove("armed", "idle-sway");
+    anim(weapon, [{ transform: heldAt(0), opacity: 1 }, { transform: wpose(held.P[0] - 260, held.P[1] + 140, held.r - 30), opacity: 0 }], { duration: 500, delay: 350, easing: "ease-in" });
+    anim(cta, [{ opacity: 1 }, { opacity: 0, transform: "translateY(40px)" }], { duration: 300, delay: 200 });
+    later(1050, prize);
+  }
+
+  function prize() {
+    state = "end";
+    var pop = $("popup");
+    anim($("dim"), [{ opacity: 0 }, { opacity: 1 }], { duration: 450 });
+    pop.classList.add("on");
+    pop.style.opacity = 1;
+    animIn(pop, [
+      { opacity: 0, transform: "translateY(80px) scale(0.86)" },
+      { opacity: 1, transform: "scale(1.02)", offset: 0.7 },
+      { opacity: 1, transform: "none" }
+    ], { duration: 520, easing: "ease-out" });
+    animIn(pop.querySelector(".coins"), [
+      { transform: "translateY(-260px) scale(0.5)", opacity: 0 },
+      { transform: "translateY(16px) scale(1.06)", opacity: 1, offset: 0.65 },
+      { transform: "translateY(0) scale(1)", opacity: 1 }
+    ], { duration: 650, delay: 160, easing: "ease-out" });
+    animIn($("bonus"), [{ opacity: 0, transform: "scale(0.6)" }, { opacity: 1, transform: "scale(1.08)", offset: 0.6 }, { opacity: 1, transform: "none" }], { duration: 480, delay: 380, easing: "ease-out" });
+    animIn($("btn"), [{ opacity: 0, transform: "translateY(60px) scale(0.9)" }, { opacity: 1, transform: "none" }], { duration: 440, delay: 560, easing: "cubic-bezier(.2,.9,.3,1.15)" });
+    later(450, function () {
+      sparks(544, 790, 26, { speed: 1, size: 1.2 });
+      coins(544, 780, 12, { size: 0.8, life: 2200 });
+      confettiRain(1e9);
     });
-    if (HOLD) return;
-
-    var MELT = FLIP0 + 2 * STEP + 530 + 420; // last flip done, then a moment to enjoy three gold cards
-    setTimeout(function () {
-      pips.forEach(function (pp, k) {
-        var to = { x: PLATE_C.x, y: PLATE_C.y, r: 0, sx: PIP_S * 0.45, sy: PIP_S * 0.45 };
-        anim(pp.el, [
-          { transform: pose(pp.p, HERO_W, HERO_H), opacity: 1 },
-          { transform: pose(to, HERO_W, HERO_H), opacity: 0 }
-        ], { duration: 420, delay: Math.abs(k - 1) * 50, easing: "cubic-bezier(.55,0,.75,.2)" });
-      });
-    }, MELT);
-
-    // "TU BONO: 125 GIROS GRATIS" pops up as the slots pour into it
-    setTimeout(function () {
-      $("plate").style.opacity = 1;
-      animIn($("plate"), [
-        { opacity: 0, transform: "scale(0.7)" },
-        { opacity: 1, transform: "scale(1.06)", offset: 0.6 },
-        { opacity: 1, transform: "none" }
-      ], { duration: 420, easing: "ease-out" });
-      sparks(PLATE_C.x, PLATE_C.y, 22, { dist: 420, jx: 300, size: 1.2, dur: 900, spread: Math.PI, angle: -Math.PI / 2 });
-    }, MELT + 300);
-
-    setTimeout(finale, MELT + 560);
-  }
-
-  function finale() {
     stage.classList.add("end");
     AD.gameEnd();
-    var btn = $("btn");
-    btn.style.opacity = 1;
-    animIn(btn, [
-      { opacity: 0, transform: "translateY(50px) scale(0.92)" },
-      { opacity: 1, transform: "none" }
-    ], { duration: 420, easing: "cubic-bezier(.2,.9,.3,1.12)" });
-    sparks(FINAL.x, FINAL.y, 18, { dist: 380, size: 1.3, delay: 150, dur: 900 });
-    setTimeout(function () {
+    later(1100, function () {
       stage.classList.add("cta");
-      hand.className = "abs img hand final on";
-    }, 500);
+      placeHand(TIP_CTA);
+      hand.className = "abs img hand on";
+    });
   }
 
   function onCta(e) {
@@ -630,34 +521,30 @@
     stage.addEventListener("touchstart", onPress, { passive: false });
     stage.addEventListener("mousedown", onPress);
   }
-  $("btn").addEventListener("click", onCta);
-  $("plate").addEventListener("click", onCta);
+  $("popup").addEventListener("pointerdown", function (e) { if (state === "end") onCta(e); });
 
-  // QA hooks: ?pick=0..4 keeps picking that card, ?round=2..3 starts at that draw,
-  // &hold=1 stops on the revealed last card
-  var m = /[?&]pick=(\d)/.exec(location.search);
-  var r0 = /[?&]round=([1-3])/.exec(location.search);
-  function autoPick() {
-    if (m) setTimeout(function () { if (started && !busy) pick(+m[1] % 5); }, 700);
+  // QA hooks: ?w=0..2 picks that weapon, &auto=1 keeps striking, ?end=1 jumps to the prize
+  var qs = location.search, qw = /[?&]w=(\d)/.exec(qs), qauto = /[?&]auto=1/.test(qs);
+  function auto() {
+    if (state === "choose" && qw) later(700, function () { if (state === "choose") choose(+qw[1] % 3); });
+    if (state === "play" && qauto) later(650, function () { if (state === "play" && !busy) strike(); });
   }
 
+  var started = false;
   function start() {
     if (started) return;
     started = true;
     fit();
     Array.prototype.forEach.call(gts, fitText); // re-measure with the web font loaded
-    fitted.forEach(fitText);
-    // the gold faces every slot turns to at the end
-    setFace("win");
-    pips.forEach(function (pp) { pp.gold.appendChild(cloneFace()); });
-    for (round = 0; r0 && round < +r0[1] - 1; round++) { setFace(KINDS[round]); fillPip(round, KINDS[round]); }
-    if (round) setGradText(title, round === 1 ? T.retry : T.oneMore);
-    setFace(KINDS[round]);
+    fitText($("btnText"));
     stage.classList.remove("loading");
-    busy = false;
+    stage.classList.add("choosing", "idle-sway");
+    placeHand(TIP_CHOOSE);
+    state = "choose";
     setIdle(true);
     AD.gameReady();
-    autoPick();
+    if (/[?&]end=1/.test(qs)) { setIdle(false); panel.classList.add("gone"); $("choose").classList.add("gone"); pinata.style.visibility = "hidden"; $("burst").style.visibility = "visible"; prize(); return; }
+    auto();
   }
 
   AD.onReady(function () {
@@ -666,13 +553,4 @@
     Promise.all([fonts, loaded]).then(start, start);
     setTimeout(start, 2500); // never get stuck on a slow font load
   });
-
-  // QA: window.__swirlAt(0..1) draws one frame of the light swirl at that moment of its life
-  if (m) window.__swirlAt = function (t) {
-    if (!swirl.ctx) swirlStart();
-    var now = performance.now();
-    swirl.t0 = now - t * SWIRL_MS;
-    swirl.last = now - 16;
-    swirlFrame(now);
-  };
 })();

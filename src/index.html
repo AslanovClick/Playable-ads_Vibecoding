@@ -4,56 +4,75 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="ad.orientation" content="portrait">
-<title>JugaBet — Saca tu carta</title>
+<title>JugaBet — Rompe la piñata</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="stage" class="loading">
-  <div id="bg" class="abs img"></div>
-  <div id="darkTop" class="abs"></div>
-  <div id="darkBot" class="abs"></div>
+  <!-- everything that shakes on a strike -->
+  <div id="scene" class="abs fill">
+    <div id="bg" class="abs img"></div>
+    <div id="shadeBot" class="abs"></div>
+    <div id="darkBot" class="abs"></div>
+    <div id="light" class="abs"></div>
 
-  <div id="logo" class="abs img"></div>
-  <div id="title" class="abs gt" data-max="1000" data-html="Saca<br>tu carta"></div>
-
-  <!-- fan of 5 card backs, built in game.js -->
-  <div id="fan" class="abs fill"></div>
-
-  <!-- three result slots under the fan: each drawn card lands in its slot (built in game.js) -->
-  <div id="pips" class="abs fill"></div>
-
-  <!-- golden arc orbiting behind the revealed card (drawn in game.js) -->
-  <canvas id="swirl" class="abs"></canvas>
-
-  <!-- the chosen card: back face, then flips to the prize face -->
-  <div id="hero" class="abs">
-    <div class="halo abs"></div>
-    <div class="flip abs fill">
-      <div class="face back abs img fill"><i class="glow"></i></div>
-      <div class="face front abs fill">
-        <div class="sun abs">
-          <i class="rays"></i>
-          <i class="burst"></i>
-          <div class="ctext c1 abs gt" data-max="330" data-html="Bono:"></div>
-          <div class="ctext c2 abs gt" data-max="360" data-html="125"></div>
-          <div class="ctext c3 abs gt" data-max="350" data-html="Giros<br>gratis"></div>
+    <!-- the pinata hangs on its rope: #swing takes the hits, #sway the idle breeze -->
+    <div id="swing" class="abs fill">
+      <div id="sway" class="abs fill">
+        <div id="rope" class="abs img"></div>
+        <div id="pinata" class="abs">
+          <div class="pz base abs img fill"></div>
+          <div class="pz crack c1 abs img fill"></div>
+          <div class="pz crack c2 abs img fill"></div>
+          <div class="pz crack c3 abs img fill"></div>
+          <div class="pz glow g1 abs img fill"></div>
+          <div class="pz glow g2 abs img fill"></div>
+          <div class="pz glow g3 abs img fill"></div>
+          <i class="hit abs"></i>
         </div>
-        <div class="frame abs img fill"></div>
+        <div id="burst" class="abs img"></div>
       </div>
     </div>
+
+    <div id="shadeTop" class="abs"></div>
+    <div id="darkTop" class="abs"></div>
+
   </div>
 
-  <div id="plate" class="abs">
-    <div class="plateBg abs img"></div>
-    <div id="plateText" class="abs" data-max="860"><span>Tu bono: 125 giros gratis</span></div>
-  </div>
+  <div id="logo" class="abs img"></div>
+  <div id="title" class="abs gt" data-max="1000" data-html="¡Rompe<br><small>la piñata!</small>"></div>
 
-  <div id="btn" class="abs img"><i class="gloss"><i class="shine"></i></i><span id="btnText" data-max="680"><span>Reclamar bono</span></span></div>
+  <!-- weapon choice -->
+  <div id="panel" class="abs">
+    <div class="pick abs" data-w="0"><i class="slot abs"></i><i class="frameGold abs"></i><i class="dust abs img"></i><i class="w abs img bat"></i></div>
+    <div class="pick abs" data-w="1"><i class="slot abs"></i><i class="frameGold abs"></i><i class="dust abs img"></i><i class="w abs img golf"></i></div>
+    <div class="pick abs" data-w="2"><i class="slot abs"></i><i class="frameGold abs"></i><i class="dust abs img"></i><i class="w abs img hammer"></i></div>
+  </div>
+  <!-- the chosen weapon with its glow, held at the left (placed by game.js); above the panel,
+       so it rises straight out of its slot -->
+  <div id="weapon" class="abs"><div class="wbody abs"><i class="wlight abs"></i><div class="wimg abs img"></div><i class="wdust abs img"></i></div></div>
+  <div id="choose" class="abs gt" data-max="900" data-html="¡Elige tu arma!"></div>
+  <div id="cta" class="abs gt" data-max="1000" data-html="¡Toca para smash!"></div>
+
+  <canvas id="fx" class="abs"></canvas>
+  <div id="flash" class="abs fill"></div>
+
+  <!-- prize -->
+  <div id="dim" class="abs fill"></div>
+  <div id="popup" class="abs">
+    <div class="rays abs"></div>
+    <div class="coins abs img"></div>
+    <i class="tw abs" style="left:150px;top:150px"></i>
+    <i class="tw abs" style="left:770px;top:120px;--td:-0.5s"></i>
+    <i class="tw abs" style="left:700px;top:420px;--td:-1s"></i>
+    <i class="tw abs" style="left:120px;top:430px;--td:-1.4s"></i>
+    <i class="tw abs" style="left:440px;top:40px;--td:-0.8s"></i>
+    <div id="bonus" class="abs gt" data-max="800" data-html="Tu bono:<br>125 giros gratis"></div>
+    <div id="btn" class="abs"><i class="gloss"><i class="shine"></i></i><span id="btnText" data-max="640"><span>Reclamar bono</span></span></div>
+  </div>
 
   <div id="taps" class="abs"><i></i><i></i></div>
   <div id="hand" class="abs img hand"></div>
-  <div id="fx" class="abs fill"></div>
-  <div id="flash" class="abs fill"></div>
 
   <div id="legal" class="abs">PRODUCCIONES MÓVILES S.A. DE C.V., PERMISIONARIA EN MATERIA DE JUEGOS Y SORTEOS CONFORME AL PERMISO DGAJS/SCEVF/P-06/2005-TER Y AL OFICIO DE AUTORIZACIÓN SG/SSCPPSAR/DGJS/0192/2026 DE LA PROMOCIÓN: Paquete de Bienvenida VIGENCIA DE AUTORIZACIÓN HASTA EL 31 DE DICIEMBRE DE 2026. PROMOCIÓN PERSONAL E INTRANSFERIBLE. JUEGUE RESPONSABLEMENTE. EL PRINCIPAL PROPÓSITO ES EL ENTRETENIMIENTO, LA DIVERSIÓN Y EL ESPARCIMIENTO. +18.</div>
 </div>

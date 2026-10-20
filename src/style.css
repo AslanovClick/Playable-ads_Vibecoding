@@ -3,20 +3,31 @@
 
 :root {
   --img-bg: url("assets/bg.webp");
-  --img-back: url("assets/card_back.webp");
-  --img-frame: url("assets/card_frame.webp");
-  --img-button: url("assets/button.webp");
+  --img-rope: url("assets/rope.webp");
+  --img-pinata: url("assets/pinata.webp");
+  --img-crack1: url("assets/crack1.webp");
+  --img-crack2: url("assets/crack2.webp");
+  --img-crack3: url("assets/crack3.webp");
+  --img-glow1: url("assets/glow1.webp");
+  --img-glow2: url("assets/glow2.webp");
+  --img-glow3: url("assets/glow3.webp");
+  --img-burst: url("assets/burst.webp");
+  --img-bat: url("assets/bat.webp");
+  --img-golf: url("assets/golf.webp");
+  --img-hammer: url("assets/hammer.webp");
   --img-hand: url("assets/hand.webp");
-  --img-plate: url("assets/plate.svg");
+  --img-coins: url("assets/coins.webp");
+  --img-coin: url("assets/coin.webp"); /* coin particles, drawn on the canvas by game.js */
+  --img-dust: url("assets/dust.webp");
   --img-logo: url("assets/logo.svg");
 
   --gold-grad: rgb(255, 255, 149) 24.229%, rgb(217, 128, 41) 86.371%, rgb(196, 91, 26) 148.51%;
-  --tap: 1.6s; /* one shared idle loop: hand press, card breathing and glow are in sync */
+  --tap: 1.6s; /* one shared idle loop: hand press, rings and the hinted thing are in sync */
 }
 
 html, body {
   margin: 0; height: 100%; overflow: hidden;
-  background: #071a10;
+  background: #1d0830;
   touch-action: none; user-select: none; -webkit-user-select: none;
   -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
 }
@@ -35,15 +46,64 @@ html, body {
 .abs { position: absolute; }
 .fill { left: 0; top: 0; width: 100%; height: 100%; }
 .img { background-size: 100% 100%; background-repeat: no-repeat; }
+i.abs, i.img { display: block; }
 
 /* ---------- scene (positions = Figma frame, 1089x1920) ---------- */
-#bg { left: -35px; top: -77px; width: 1158px; height: 2074px; background-image: var(--img-bg); }
-#darkTop { left: 0; top: -26px; width: 1089px; height: 605px; opacity: 0.49; background: linear-gradient(to bottom, #000, rgba(0,0,0,0)); pointer-events: none; }
-#darkBot { left: 0; top: 1318px; width: 1089px; height: 605px; opacity: 0.49; background: linear-gradient(to bottom, rgba(0,0,0,0), #000); pointer-events: none; }
-#logo { left: 237px; top: 76px; width: 615px; height: 97px; background-image: var(--img-logo); }
+#scene { pointer-events: none; }
+#bg { left: 0; top: -15px; width: 1089px; height: 1950px; background-image: var(--img-bg); }
+#shadeBot { left: 0; top: 1310px; width: 1089px; height: 610px; opacity: 0.66; background: linear-gradient(to top, rgb(150, 49, 88) 30.98%, rgba(225, 99, 148, 0) 51.96%); }
+#darkBot { left: 0; top: 1318px; width: 1089px; height: 605px; opacity: 0.49; background: linear-gradient(to bottom, rgba(0,0,0,0), #000); }
+#shadeTop { left: 0; top: 0; width: 1089px; height: 610px; opacity: 0.66; background: linear-gradient(to bottom, #045f39, rgba(4, 95, 57, 0)); }
+#darkTop { left: 0; top: -26px; width: 1089px; height: 605px; opacity: 0.49; background: linear-gradient(to top, rgba(0,0,0,0), #000); }
+/* soft light behind the pinata (a blurred white ellipse in Figma) */
+#light {
+  left: 243px; top: 494px; width: 669px; height: 950px; transform: rotate(17.21deg);
+  background: radial-gradient(closest-side, rgba(255, 255, 240, 0.62), rgba(255, 255, 240, 0.3) 45%, rgba(255, 255, 240, 0) 100%);
+}
+
+/* pinata on its rope; it swings around the rope's anchor high above the frame */
+#swing, #sway { transform-origin: 544.6px -200px; }
+.idle-sway #sway { animation: sway 3.2s ease-in-out infinite; }
+#rope { left: 533.1px; top: -260px; width: 23.1px; height: 645px; background-image: var(--img-rope); }
+#pinata { left: 278.45px; top: 418px; width: 575px; height: 831px; transform-origin: 50% 20%; }
+#pinata .base { background-image: var(--img-pinata); }
+#pinata .c1 { background-image: var(--img-crack1); }
+#pinata .c2 { background-image: var(--img-crack2); }
+#pinata .c3 { background-image: var(--img-crack3); }
+#pinata .g1 { background-image: var(--img-glow1); }
+#pinata .g2 { background-image: var(--img-glow2); }
+#pinata .g3 { background-image: var(--img-glow3); }
+#pinata .crack, #pinata .glow { visibility: hidden; }
+#pinata .crack.on, #pinata .glow.on { visibility: visible; }
+/* the glowing cracks keep crackling: an uneven flicker */
+#pinata .glow.on { animation: crackle 1.3s linear infinite; }
+#pinata .hit {
+  left: 0; top: 0; width: 360px; height: 360px; margin: -180px 0 0 -180px; border-radius: 50%; opacity: 0;
+  background: radial-gradient(closest-side, rgba(255, 252, 220, 1), rgba(255, 210, 90, 0.7) 35%, rgba(255, 150, 30, 0) 100%);
+}
+#burst { left: 208.7px; top: 421px; width: 672px; height: 1008.3px; background-image: var(--img-burst); visibility: hidden; transform-origin: 50% 40%; }
+
+/* ---------- the weapon in hand ---------- */
+#weapon { left: 0; top: 0; width: 0; height: 0; visibility: hidden; pointer-events: none; }
+#weapon .wimg { left: 0; top: 0; }
+.bat { background-image: var(--img-bat); }
+.golf { background-image: var(--img-golf); }
+.hammer { background-image: var(--img-hammer); }
+/* the glow travels with the weapon (children of #weapon, placed by game.js) */
+#weapon .wbody { left: 0; top: 0; transform-origin: 0 0; }
+#weapon .wlight {
+  width: 528px; height: 998px; opacity: 0;
+  background: radial-gradient(closest-side, rgba(255, 250, 225, 0.55), rgba(255, 250, 225, 0.22) 45%, rgba(255, 250, 225, 0) 100%);
+}
+#weapon .wdust { width: 420px; height: 280px; background-image: var(--img-dust); opacity: 0; }
+.armed #weapon .wlight { opacity: 1; transition: opacity 0.6s; }
+.armed #weapon .wdust { opacity: 1; transition: opacity 0.6s; animation: dust 2.4s ease-in-out infinite; }
+/* waiting for a strike: the weapon twitches and the call to action pulses with the hand */
+.armed.idle #weapon .wbody { animation: waggle var(--tap) ease-in-out infinite; }
+.armed.idle #cta { animation: ctaIdle var(--tap) ease-in-out infinite; }
 
 /* ---------- gradient text with dark red outline ---------- */
-.gt { white-space: nowrap; text-align: center; font-weight: 900; }
+.gt { white-space: nowrap; text-align: center; font-weight: 900; text-transform: uppercase; }
 .gt .s {
   display: block; position: absolute; left: 0; top: 0; width: 100%;
   color: #841502; -webkit-text-stroke: 10px #841502;
@@ -55,206 +115,156 @@ html, body {
   -webkit-background-clip: text; background-clip: text;
   color: transparent; -webkit-text-fill-color: transparent;
 }
-#title { left: 0; width: 100%; top: 230px; font-size: 127.792px; line-height: 0.8; --ga: 166.75deg; }
-/* the tight line box would cut the gradient off descenders ("p" in "por"): paint below it too */
-#title .f { padding-bottom: 0.22em; margin-bottom: -0.22em; }
+.gt small { font-size: 0.78125em; } /* 100px under the 128px "ROMPE" */
+#logo { left: 237px; top: 76px; width: 615px; height: 97px; background-image: var(--img-logo); }
+#logo, #title { z-index: 4; } /* stay bright above the pop-up dimming, like in Figma */
+#title { left: 0; width: 100%; top: 230px; font-size: 128px; line-height: 1; --ga: 167.17deg; }
+#choose { left: 0; width: 100%; top: 1258px; font-size: 62px; line-height: 1; --ga: 177deg; transform-origin: 50% 50%; }
+#cta { left: 0; width: 100%; top: 1546px; font-size: 80px; line-height: 1; --ga: 176.9deg; opacity: 0; transform-origin: 50% 50%; }
+/* descenders (the "p" of "Rompe"/"para") would lose the gradient under the tight line box */
+.gt .f { padding-bottom: 0.2em; margin-bottom: -0.2em; }
 
-/* ---------- fan of card backs ---------- */
-#fan { pointer-events: none; will-change: opacity; }
-.card { width: 397px; height: 541.4px; transform-origin: 50% 50%; pointer-events: auto; }
-.card .cin { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background: var(--img-back) 0 0 / 100% 100% no-repeat; }
-/* green highlight of the "Variant2" card state (blurred neon border) */
-.glow { position: absolute; left: 1%; top: 0.5%; right: 1%; bottom: 0.5%; border-radius: 27px; opacity: 0; pointer-events: none; }
-.glow::before, .glow::after { content: ""; position: absolute; inset: 0; border-radius: inherit; border: 8px solid #04ff92; }
-.glow::before { filter: blur(8px); }
-.glow::after { filter: blur(17.5px); }
-.card .cin { z-index: 1; }
-.card .glow { z-index: 0; }
-
-.idle .card .cin { animation: breathe var(--tap) ease-in-out infinite; animation-delay: var(--d); }
-.idle .card.hint .cin { animation-name: hintPress; }
-.idle .card.hint .glow { animation: glowHint var(--tap) ease-out infinite; }
-
-/* hover (mouse only, before a card is picked): the card keeps its place in the fan and gently
-   slides up along its own axis, peeking over the arc of cards, with the green glow of Figma state 2. Lives on .lift so it doesn't fight the breathing on .cin;
-   :hover is tested on the static .card box, so the rising picture can't flicker the hover. */
-.card .lift { position: absolute; left: 0; top: 0; width: 100%; height: 100%; transition: transform 0.45s cubic-bezier(.25,.8,.35,1); }
-.card .glow { transition: opacity 0.4s ease; }
-@media (hover: hover) and (pointer: fine) {
-  .idle .card:hover .lift { transform: translateY(-48px); }
-  .idle .card:hover .glow { opacity: 1; animation: none; }
-  .idle.hovering .card.hint:not(:hover) .glow { animation: none; opacity: 0; }
-  .idle.hovering .card.hint:not(:hover) .cin { animation-name: breathe; }
-  .idle.hovering #hand, .idle.hovering #taps { opacity: 0; transition: opacity 0.2s; }
+/* ---------- weapon panel (rebuilt from the Figma art: frame and slots in CSS) ---------- */
+#panel {
+  left: 86px; top: 1345px; width: 915px; height: 334px; box-sizing: border-box; border-radius: 70px;
+  border: 10px solid #fcb52f;
+  background: #24023b;
+  box-shadow: inset 0 0 0 4px #3c075b, inset 0 0 0 14px #490e76, inset 0 0 0 16px #1e0036, 0 0 0 3px #7a3a06, 0 12px 30px rgba(0, 0, 0, 0.5);
 }
-
-/* ---------- chosen card ---------- */
-#hero { left: 0; top: 0; width: 507px; height: 674px; transform-origin: 50% 50%; visibility: hidden; pointer-events: none; }
-#hero .flip { transform-origin: 50% 50%; }
-#hero .back { background-image: var(--img-back); }
-#hero .back .glow { z-index: -1; }
-#hero .front { visibility: hidden; }
-#hero .frame { background-image: var(--img-frame); }
-#hero .halo {
-  left: -300px; top: -280px; width: 1107px; height: 1234px; border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(255, 214, 120, 0.7), rgba(255, 170, 50, 0.28) 45%, rgba(255, 150, 20, 0) 100%);
-  opacity: 0; will-change: transform, opacity;
+.pick { top: 40px; width: 246px; height: 246px; pointer-events: auto; transform-origin: 50% 50%; }
+.pick:nth-child(1) { left: 42px; }
+.pick:nth-child(2) { left: 325.5px; }
+.pick:nth-child(3) { left: 609px; }
+.slot {
+  left: 0; top: 0; width: 100%; height: 100%; box-sizing: border-box; border-radius: 40px;
+  border: 8px solid #e43af9;
+  background: radial-gradient(circle at 62% 58%, #950bb8 0%, #84069f 30%, #6c0397 62%, #560180 100%);
+  box-shadow: inset 0 0 0 3px #3b036d, inset 0 -6px 0 3px rgba(132, 9, 161, 0.9), inset 0 3px 0 0 #f879ff, 0 0 0 3px #4a0a6a, 0 8px 14px rgba(0, 0, 0, 0.45);
+  transition: background 0.25s, border-color 0.25s, box-shadow 0.25s;
 }
-#hero.shown:not(.k-lose) .halo { animation: halo 1.6s ease-in-out infinite; }
-#hero.k-half .halo { transform: scale(0.82); }
-
-/* prize face, rebuilt from the Figma art so the amount is live text */
-.sun {
-  left: 47px; top: 43px; right: 44px; bottom: 41px; border-radius: 20px; overflow: hidden;
-  background: radial-gradient(ellipse 78% 62% at 50% 47%, #fff8dc 0%, #ffe39a 12%, #f0b860 28%, #c58646 45%, #8f6038 62%, #5f4129 80%, #3b2b22 100%);
+.pick.on .slot {
+  border-color: #3df61e;
+  background: radial-gradient(circle at 62% 58%, #08a334 0%, #038c30 30%, #017029 62%, #01550e 100%);
+  box-shadow: inset 0 0 0 3px #014410, inset 0 -6px 0 3px rgba(2, 110, 30, 0.9), inset 0 3px 0 0 #b9ff9e, 0 0 0 3px #0c3d06, 0 0 34px rgba(80, 255, 60, 0.7);
 }
-.sun .rays {
-  position: absolute; left: 50%; top: 47%; width: 900px; height: 900px; margin: -450px 0 0 -450px;
-  background: repeating-conic-gradient(from 0deg, rgba(255, 238, 180, 0.28) 0deg 5deg, rgba(255, 238, 180, 0) 5deg 15deg);
-  -webkit-mask-image: radial-gradient(closest-side, #000 8%, rgba(0,0,0,0.6) 35%, transparent 70%);
-  mask-image: radial-gradient(closest-side, #000 8%, rgba(0,0,0,0.6) 35%, transparent 70%);
-  will-change: transform;
-}
-.sun .burst {
-  position: absolute; inset: 0; opacity: 0; will-change: opacity;
-  background: radial-gradient(ellipse 70% 55% at 50% 47%, rgba(255, 255, 240, 1), rgba(255, 240, 190, 0.6) 50%, rgba(255, 230, 160, 0.2) 100%);
-}
-#hero.shown:not(.k-lose) .rays { animation: spin 24s linear infinite; }
-.sun::after {
-  content: ""; position: absolute; inset: 0;
-  background: radial-gradient(ellipse 45% 32% at 50% 47%, rgba(255, 252, 230, 0.9), rgba(255, 240, 190, 0) 100%);
-  opacity: 0.5; will-change: opacity;
-}
-#hero.shown:not(.k-lose) .sun::after { animation: sunPulse 1.6s ease-in-out infinite; }
-.gt.ctext { left: 0; width: 100%; text-transform: uppercase; z-index: 1; }
-.gt.ctext .s { color: #6b3006; -webkit-text-stroke: 9px #6b3006; text-shadow: 0 7px 0 #4e2204, 0 12px 20px rgba(0, 0, 0, 0.55); }
-.gt.ctext .f { background-image: linear-gradient(180deg, #fff7c8 0%, #ffe08a 40%, #f2ad55 72%, #d0812f 100%); }
-.c1 { top: 112px; font-size: 64px; line-height: 1; }
-.c2 { top: 176px; font-size: 172px; line-height: 0.92; }
-.c3 { top: 352px; font-size: 70px; line-height: 0.98; }
-
-/* empty card (1st draw): the same card, drained to grey */
-.k-lose .sun { background: radial-gradient(ellipse 78% 62% at 50% 47%, #e9e9e9 0%, #b9b9b9 22%, #8a8a8a 45%, #5f5f5f 68%, #3a3a3a 100%); }
-.k-lose .rays { opacity: 0.25; }
-.k-lose .sun::after { opacity: 0.12; }
-.k-lose .frame { filter: grayscale(1) brightness(0.78) contrast(1.1); }
-.k-lose .gt.ctext .s { color: #2b2b2b; -webkit-text-stroke-color: #2b2b2b; text-shadow: 0 7px 0 #1a1a1a, 0 12px 20px rgba(0, 0, 0, 0.55); }
-.k-lose .gt.ctext .f { background-image: linear-gradient(180deg, #ffffff 0%, #dadada 40%, #a4a4a4 72%, #7c7c7c 100%); }
-
-/* ---------- result slots under the fan: mini copies of the drawn cards ---------- */
-.pip { left: 0; top: 0; width: 507px; height: 674px; transform-origin: 50% 50%; pointer-events: none; }
-.pip .pflip { transform-origin: 50% 50%; }
-.pip .pback { background-image: var(--img-back); opacity: 0.4; transition: opacity 0.3s; }
-.pip .pres, .pip .pgold { visibility: hidden; }
-.pip.filled .pback, .pip.gold .pback { visibility: hidden; }
-.pip.filled .pres, .pip.gold .pgold { visibility: visible; }
-.pip.gold .pres { visibility: hidden; } /* after the line above: a gold slot shows only the gold face */
-.pip .glow { left: -2%; top: -1.5%; right: -2%; bottom: -1.5%; border-radius: 40px; }
-.pip .glow::before, .pip .glow::after { border-width: 18px; }
-.pip .glow::before { filter: blur(18px); }
-.pip .glow::after { filter: blur(40px); }
-/* the slot the next card goes to wakes up with the hand's press */
-.idle .pip.next .pback { animation: pipNext var(--tap) ease-out infinite; }
-.idle .pip.next .glow { animation: glowHint var(--tap) ease-out infinite; }
-/* won: every slot glows gold */
-.pip.gold .glow { opacity: 1; animation: none; transition: opacity 0.3s; }
-.pip.gold .glow::before, .pip.gold .glow::after { border-color: #ffc94a; }
-
-#swirl { left: 0; top: 0; width: 1089px; height: 1920px; pointer-events: none; }
-
-/* ---------- prize plate and CTA ---------- */
-#plate { left: 54.96px; top: 1244.46px; width: 980px; height: 191.55px; opacity: 0; }
-#plate .plateBg { left: 0; top: 0; width: 100%; height: 100%; background-image: var(--img-plate); }
-#plateText {
-  left: 0; width: 100%; top: 75.8px; /* plate box (y 1297..1427) centre - half line */
-  text-align: center; white-space: nowrap; text-transform: uppercase;
-  font-size: 80px; font-weight: 900; line-height: 90.4px; color: #844702;
-}
-#plateText > span, #btnText > span { display: inline-block; }
-#plateText b { font-weight: 900; }
-
-#btn { left: 156px; top: 1472px; width: 734px; height: 215px; background-image: var(--img-button); opacity: 0; }
-/* invisible CTA parts must not catch taps before the finale */
-#btn, #plate { pointer-events: none; }
-.end #btn, .end #plate { pointer-events: auto; }
-#btn .gloss {
-  position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: hidden;
-  -webkit-mask: var(--img-button) 0 0 / 100% 100% no-repeat; mask: var(--img-button) 0 0 / 100% 100% no-repeat;
-}
-#btn .shine {
-  position: absolute; top: 0; left: -40%; width: 25%; height: 88%;
-  background: linear-gradient(100deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.6) 50%, rgba(255,255,255,0) 100%);
-  transform: skewX(-20deg);
-}
-#btnText {
-  position: absolute; left: 0; width: 100%; top: 60.4px; /* face centre (y=100 of 215, above the lip) - half line */
-  text-align: center; white-space: nowrap; text-transform: uppercase;
-  font-size: 70px; font-weight: 900; line-height: 79.1px; color: #844702;
-}
-.cta #btn { animation: btnPulse 1.2s ease-in-out infinite; }
-.cta #btn .shine { animation: shine 2.4s ease-in-out infinite 0.4s; }
+.frameGold { left: -6px; top: -6px; right: -6px; bottom: -6px; border-radius: 46px; border: 3px solid #ffef00; box-shadow: 0 0 14px rgba(255, 230, 0, 0.8); opacity: 0; }
+.pick .dust { left: 50%; top: 50%; width: 420px; height: 280px; margin: -149px 0 0 -207px; transform: rotate(-75deg); background-image: var(--img-dust); opacity: 0; }
+.pick.on .frameGold, .pick.on .dust { opacity: 1; transition: opacity 0.3s; }
+.pick .w { transform-origin: 50% 60%; }
+.pick .bat { left: 12px; top: -29px; width: 255.5px; height: 280px; }
+.pick .golf { left: 13px; top: -35px; width: 251px; height: 280px; }
+.pick .hammer { left: 13px; top: -18px; width: 241px; height: 270px; }
+/* idle: the weapons bob one after another, the one under the hand on its press */
+.choosing .pick .w { animation: wbob var(--tap) ease-in-out infinite; }
+.choosing .pick:nth-child(1) .w { animation-name: wpress; }
+.choosing .pick:nth-child(2) .w { animation-delay: 0.22s; }
+.choosing .pick:nth-child(3) .w { animation-delay: 0.44s; }
+.choosing .pick:nth-child(1) .slot { animation: slotHint var(--tap) ease-out infinite; }
+#panel, #choose { transition: opacity 0.35s, transform 0.45s cubic-bezier(.5,0,.75,0); }
+#panel.gone, #choose.gone { opacity: 0; transform: translateY(160px); pointer-events: none; }
+#panel.gone .pick { pointer-events: none; }
 
 /* ---------- hand hint ---------- */
-.hand { width: 184px; height: 209px; background-image: var(--img-hand); transform-origin: 12% 8%; opacity: 0; pointer-events: none; }
+.hand { width: 287px; height: 314px; background-image: var(--img-hand); transform-origin: 20.8% 12.1%; opacity: 0; pointer-events: none; z-index: 6; }
 .hand.on { opacity: 1; animation: handTap var(--tap) ease-in-out infinite; transition: opacity 0.25s; }
-.hand.off { opacity: 0; transition: opacity 0.2s; }
-/* a bit smaller than in Figma so the result slots stay visible; the fingertip is where it was */
-#hand { left: 746.5px; top: 1174.2px; z-index: 5; }
-#hand.final { left: 744px; top: 1613px; width: 230px; height: 261px; } /* above the disclaimer, like in Figma */
-
+.hand.off { opacity: 0; transition: opacity 0.15s; }
 /* rings pulsing from the fingertip on every press: "tap here" */
-#taps { left: 692px; top: 1115px; width: 140px; height: 140px; z-index: 4; pointer-events: none; transition: opacity 0.2s; }
+#taps { width: 150px; height: 150px; z-index: 5; pointer-events: none; opacity: 0; transition: opacity 0.2s; }
 #taps i {
   position: absolute; left: 0; top: 0; width: 100%; height: 100%; box-sizing: border-box; border-radius: 50%;
   border: 5px solid rgba(255, 236, 170, 0.95);
   box-shadow: 0 0 16px rgba(255, 190, 80, 0.85), inset 0 0 12px rgba(255, 190, 80, 0.55);
   opacity: 0;
 }
-.idle #taps i:nth-child(1) { animation: tap1 var(--tap) linear infinite; }
-.idle #taps i:nth-child(2) { animation: tap2 var(--tap) linear infinite; }
-#stage:not(.idle) #taps { opacity: 0; }
+#taps.on { opacity: 1; }
+#taps.on i:nth-child(1) { animation: tap1 var(--tap) linear infinite; }
+#taps.on i:nth-child(2) { animation: tap2 var(--tap) linear infinite; }
 
 /* ---------- effects ---------- */
-#fx { pointer-events: none; }
+#fx { left: 0; top: 0; width: 1089px; height: 1920px; pointer-events: none; z-index: 2; }
 #flash {
-  background: radial-gradient(circle at 53% 52%, rgba(255, 246, 200, 1), rgba(255, 196, 80, 0.8) 30%, rgba(255, 150, 20, 0) 65%);
-  opacity: 0; pointer-events: none; will-change: opacity;
-}
-.spark.dust { background: radial-gradient(circle, rgba(235,235,235,0.9) 0, rgba(160,160,160,0.6) 40%, rgba(90,90,90,0) 72%); }
-.spark {
-  position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%;
-  background: radial-gradient(circle, #fff 0, #ffe58a 30%, rgba(255, 170, 40, 0.9) 55%, rgba(255, 140, 0, 0) 72%);
+  background: radial-gradient(circle at 52% 50%, rgba(255, 250, 220, 1), rgba(255, 210, 90, 0.75) 32%, rgba(255, 160, 30, 0) 68%);
+  opacity: 0; pointer-events: none; z-index: 3;
 }
 
+/* ---------- prize pop-up ---------- */
+#dim { background: radial-gradient(ellipse at 50% 45%, rgba(40, 6, 60, 0.35), rgba(16, 0, 28, 0.75)); opacity: 0; pointer-events: none; z-index: 3; }
+#popup {
+  left: 82.9px; top: 505px; width: 923.3px; height: 1171px; box-sizing: border-box; border-radius: 37px;
+  border: 7px solid #5a0385;
+  background: linear-gradient(to bottom, rgba(71, 13, 100, 0.9), rgba(42, 4, 66, 0.94));
+  box-shadow: 0 0 0 3px rgba(255, 196, 70, 0.55), 0 0 70px rgba(255, 180, 60, 0.35), inset 0 0 90px rgba(170, 70, 255, 0.35);
+  opacity: 0; visibility: hidden; z-index: 4; overflow: hidden;
+}
+#popup.on { visibility: visible; }
+/* slow golden rays behind the coins */
+#popup .rays {
+  left: 461.6px; top: 281px; width: 1300px; height: 1300px; margin: -650px 0 0 -650px; border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, rgba(255, 214, 110, 0.32) 0deg 9deg, rgba(255, 214, 110, 0) 9deg 22.5deg);
+  -webkit-mask-image: radial-gradient(closest-side, #000 10%, rgba(0, 0, 0, 0.5) 40%, transparent 72%);
+  mask-image: radial-gradient(closest-side, #000 10%, rgba(0, 0, 0, 0.5) 40%, transparent 72%);
+  will-change: transform;
+}
+#popup.on .rays { animation: spin 18s linear infinite; }
+#popup .coins { left: 187.1px; top: 98px; width: 549px; height: 366px; background-image: var(--img-coins); transform-origin: 50% 80%; }
+#popup.on .coins { animation: coinsFloat 2.4s ease-in-out infinite; }
+/* twinkling stars around the coins */
+.tw {
+  width: 48px; height: 48px; margin: -24px 0 0 -24px;
+  background: radial-gradient(circle, #fff 0, #fff3b0 30%, #ffc23a 60%);
+  clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%);
+  opacity: 0;
+}
+#popup.on .tw { animation: twinkle 1.6s ease-in-out infinite; animation-delay: var(--td, 0s); }
+#bonus { left: 0; width: 100%; top: 474px; font-size: 80px; line-height: 1.13; --ga: 169.9deg; }
+#bonus small { font-size: 0.975em; }
+
+/* CTA button, drawn in CSS: an even, crisp pill instead of the upscaled Figma bitmap */
+#btn {
+  left: 71.6px; top: 815px; width: 780px; height: 196px; box-sizing: border-box; border-radius: 46px;
+  background: linear-gradient(to bottom, #b6ff52 0%, #86ec18 30%, #5fd000 62%, #48b300 100%);
+  box-shadow: inset 0 -10px 0 rgba(30, 110, 0, 0.55), inset 0 6px 0 rgba(255, 255, 255, 0.55), 0 14px 0 #2e7d00, 0 22px 30px rgba(0, 0, 0, 0.45), 0 0 0 5px rgba(20, 70, 0, 0.35);
+  pointer-events: none;
+}
+.end #btn { pointer-events: auto; }
+#btn .gloss { position: absolute; left: 0; top: 0; width: 100%; height: 100%; border-radius: inherit; overflow: hidden; }
+#btn .gloss::before { /* glossy top band */
+  content: ""; position: absolute; left: 3.5%; top: 9%; width: 93%; height: 34%; border-radius: 30px;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.08));
+}
+#btn .shine {
+  position: absolute; top: 0; left: -40%; width: 22%; height: 100%;
+  background: linear-gradient(100deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.65) 50%, rgba(255,255,255,0) 100%);
+  transform: skewX(-20deg);
+}
+#btnText {
+  position: absolute; left: 0; width: 100%; top: 0; line-height: 182px; /* centred above the 14px lip */
+  text-align: center; white-space: nowrap; text-transform: uppercase;
+  font-size: 58px; font-weight: 900; color: #0a234f; text-shadow: 0 2px 0 rgba(255, 255, 255, 0.35);
+}
+#btnText > span { display: inline-block; }
+.cta #btn { animation: btnPulse 1.2s ease-in-out infinite; }
+.cta #btn .shine { animation: shine 2.4s ease-in-out infinite 0.4s; }
+
 #legal {
-  left: 42px; top: 1726px; width: 1005px;
+  left: 42px; top: 1726px; width: 1005px; z-index: 5;
   font-size: 18px; font-weight: 400; line-height: normal; color: #dfc8c8;
   text-align: center; text-transform: uppercase; pointer-events: none;
 }
 
 /* ---------- keyframes ---------- */
+@keyframes sway { 0%, 100% { transform: rotate(-1.4deg); } 50% { transform: rotate(1.4deg); } }
+@keyframes crackle {
+  0% { opacity: 0.75; } 9% { opacity: 1; } 15% { opacity: 0.55; } 31% { opacity: 0.9; } 38% { opacity: 0.7; }
+  52% { opacity: 1; } 61% { opacity: 0.6; } 74% { opacity: 0.95; } 86% { opacity: 0.65; } 100% { opacity: 0.75; }
+}
+@keyframes dust { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
 @keyframes handTap {
   0%, 100% { transform: translate(0, 0) scale(1); }
   36% { transform: translate(-14px, -18px) scale(1); }
   48% { transform: translate(-6px, -6px) scale(0.88); }
   60% { transform: translate(-8px, -9px) scale(0.96); }
 }
-/* breathing wave across the fan; it reaches the hinted card exactly on the hand press (48%) */
-@keyframes breathe {
-  0%, 60%, 100% { transform: scale(1); }
-  30% { transform: scale(1.035); }
-}
-@keyframes hintPress {
-  0%, 38%, 100% { transform: translateY(0) scale(1); }
-  50% { transform: translateY(-22px) scale(1.05); }
-  72% { transform: translateY(-8px) scale(1.02); }
-}
-@keyframes glowHint {
-  0%, 44%, 100% { opacity: 0; }
-  52% { opacity: 1; }
-  78% { opacity: 0.5; }
-}
-/* fingertip rings: born on the press (48%), spreading and fading */
 @keyframes tap1 {
   0%, 46% { transform: scale(0.3); opacity: 0; animation-timing-function: cubic-bezier(.2,.7,.4,1); }
   50% { opacity: 1; }
@@ -265,12 +275,25 @@ html, body {
   58% { opacity: 0.75; }
   100% { transform: scale(1.1); opacity: 0; }
 }
-@keyframes pipNext {
-  0%, 44%, 100% { opacity: 0.4; }
-  54% { opacity: 0.85; }
+@keyframes wbob { 0%, 100% { transform: translateY(0) rotate(0); } 30% { transform: translateY(-10px) rotate(-3deg); } 55% { transform: translateY(0) rotate(0); } }
+@keyframes wpress {
+  0%, 38%, 100% { transform: translateY(0) scale(1) rotate(0); }
+  50% { transform: translateY(-14px) scale(1.08) rotate(-4deg); }
+  70% { transform: translateY(-4px) scale(1.02) rotate(-1deg); }
 }
-@keyframes halo { 0%, 100% { opacity: 0.55; transform: scale(0.96); } 50% { opacity: 0.95; transform: scale(1.04); } }
-@keyframes sunPulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.9; } }
+@keyframes slotHint {
+  0%, 44%, 100% { box-shadow: inset 0 0 0 3px #3b036d, inset 0 -6px 0 3px rgba(132, 9, 161, 0.9), inset 0 3px 0 0 #f879ff, 0 0 0 3px #4a0a6a, 0 8px 14px rgba(0, 0, 0, 0.45); }
+  54% { box-shadow: inset 0 0 0 3px #3b036d, inset 0 -6px 0 3px rgba(132, 9, 161, 0.9), inset 0 3px 0 0 #f879ff, 0 0 0 3px #4a0a6a, 0 0 34px rgba(240, 120, 255, 0.85); }
+}
+@keyframes waggle {
+  0%, 36%, 100% { transform: rotate(0deg); }
+  48% { transform: rotate(-6deg); }
+  66% { transform: rotate(2.5deg); }
+  82% { transform: rotate(0deg); }
+}
+@keyframes ctaIdle { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes coinsFloat { 0%, 100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-14px) rotate(-1.2deg); } }
+@keyframes twinkle { 0%, 100% { opacity: 0; transform: scale(0.3) rotate(0); } 50% { opacity: 1; transform: scale(1.1) rotate(45deg); } }
 @keyframes btnPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
 @keyframes shine { 0% { left: -40%; } 55%, 100% { left: 125%; } }
