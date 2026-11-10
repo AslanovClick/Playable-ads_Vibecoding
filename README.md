@@ -20,7 +20,7 @@ npm run build                                   # -> dist/index.html (один �
 node tools/build.mjs --url=https://landing.example
 ```
 
-Все тексты и ссылка — в [src/config.js](src/config.js). `sound: false` выключает звуки интерфейса.
+Все тексты и ссылка — в [src/config.js](src/config.js). `sound: false` выключает звуки интерфейса. Дисклеймер внизу сейчас выключен (`legal: ""`), но место под него внизу экрана оставлено свободным: чтобы вернуть, достаточно вписать текст в `legal`.
 
 ## Ассеты
 
