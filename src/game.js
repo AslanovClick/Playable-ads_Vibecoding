@@ -514,7 +514,7 @@
   var Z = null, prog = 0, target = 0, drag = null, guideOn = false, travel = 0, zipRaf = 0, lastT = 0;
   var TRAVEL = 1.3; // finger travel for the whole zipper, in zipper lengths
   var MAX_SPEED = 1.6; // zipper lengths per second, at most
-  var HOLD_MS = 1500; // after the zipper stops: her slow-motion moment before the chat
+  var HOLD_MS = 1500; // after the zipper stops: her moment with her back turned, before the chat
   var unzipShown = false;
   function swipeScene() {
     state = "swipe";
@@ -611,14 +611,9 @@
     sparks(Z.x, Z.y1, 16, 190, 1);
     hideTitle();
     anim(handle, [{ opacity: 1, transform: "scale(1)" }, { opacity: 0, transform: "scale(2.2)" }], 450);
-    // She stays with her back to us a little longer: the clip plays on and eases into slow motion
-    // (1x -> 0.55x over half a second), 1.5 s in all, before the chat.
-    var v = Player.release();
-    if (v) {
-      [[0, 0.85], [200, 0.7], [450, 0.55]].forEach(function (r) {
-        setTimeout(function () { try { v.playbackRate = r[1]; } catch (e) {} }, r[0]);
-      });
-    }
+    // She stays with her back to us a little longer: the clip plays on at its normal speed (slowing it
+    // down drops the frame rate of a 24 fps clip and looks choppy), 1.5 s, before the chat.
+    Player.release();
     setTimeout(chatScene, HOLD_MS);
   }
 

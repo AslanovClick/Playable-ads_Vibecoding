@@ -24,8 +24,9 @@ OUT_V = ROOT / "src" / "video"
 OUT_A = ROOT / "src" / "assets"
 
 DRESSES = {"1": "red", "2": "black", "3": "burgundy"}
+# the swipe scrubs the first ~1.7 s, then it plays on at normal speed for 1.5 s, then the fade to the chat
+UNZIP_SECONDS = 4.2  # with a margin, so the last frame never freezes before the cut
 SCENES = {"2": "wear", "3": "turn", "5": "unzip", "6": "chat"}  # 4 (idle with her back turned) is not used
-UNZIP_SECONDS = 3.0  # the swipe scrubs the first ~1.7 s, then it plays on a moment for her reaction
 
 
 def ffmpeg():
@@ -51,11 +52,13 @@ def clips():
             yield f, f"{SCENES[scene]}_{DRESSES[n]}"
 
 
-def encode_videos(width, crf):
+def encode_videos(width, crf, only=None):
     OUT_V.mkdir(parents=True, exist_ok=True)
     ff = ffmpeg()
     total = 0
     for src, name in clips():
+        if only and not name.startswith(only):
+            continue
         out = OUT_V / f"{name}.mp4"
         args = [ff, "-v", "error", "-y", "-i", str(src), "-an",
                 "-vf", f"scale={width}:-2:flags=lanczos,setsar=1",
@@ -114,9 +117,9 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--width", type=int, default=720)
     ap.add_argument("--crf", type=int, default=29)
-    ap.add_argument("--only", choices=["video", "images"])
+    ap.add_argument("--only", choices=["video", "images", "unzip"])  # unzip: just the zipper clips
     a = ap.parse_args()
-    if a.only != "video":
+    if a.only not in ("video", "unzip"):
         prepare_images()
-    if a.only != "images":
-        encode_videos(a.width, a.crf)
+    if a.only not in ("images",):
+        encode_videos(a.width, a.crf, "unzip" if a.only == "unzip" else None)
