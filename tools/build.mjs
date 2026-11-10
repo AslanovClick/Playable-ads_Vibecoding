@@ -1,6 +1,7 @@
 // Bundles src/ into a single self-contained dist/index.html (all assets as data URIs).
 //
-//   node tools/build.mjs [--amount=125] [--unit="giros gratis"] [--url=https://...] [--out=dist/index.html]
+//   node tools/build.mjs [--url=https://...] [--out=dist/index.html]
+// Asset paths in CSS url() and in JS string literals ("video/x.mp4", "assets/x.webp") become data URIs.
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve, extname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,7 +19,7 @@ const OUT = resolve(ROOT, args.out || "dist/index.html");
 
 const MIME = {
   ".webp": "image/webp", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
-  ".svg": "image/svg+xml", ".woff2": "font/woff2",
+  ".svg": "image/svg+xml", ".woff2": "font/woff2", ".mp4": "video/mp4",
 };
 
 const dataUri = (file) => {
@@ -37,14 +38,15 @@ const inlineCss = (file) => {
 };
 
 const overrides = {};
-if (args.amount) overrides.bonusAmount = Number(args.amount);
 if (args.url) overrides.clickUrl = args.url;
-if (args.unit) overrides.bonusUnit = args.unit;
+
+const inlineJs = (js) =>
+  js.replace(/"((?:video|assets)\/[\w.-]+\.(?:mp4|webp|png|jpg|svg))"/g, (_, p) => JSON.stringify(dataUri(resolve(SRC, p))));
 
 let html = readFileSync(resolve(SRC, "index.html"), "utf8");
 html = html.replace(/<link rel="stylesheet" href="([^"]+)">/g, (_, p) => `<style>${inlineCss(resolve(SRC, p))}</style>`);
 html = html.replace(/<script src="([^"]+)"><\/script>/g, (_, p) => {
-  let js = readFileSync(resolve(SRC, p), "utf8");
+  let js = inlineJs(readFileSync(resolve(SRC, p), "utf8"));
   if (p === "config.js" && Object.keys(overrides).length) {
     js += `\nObject.assign(window.PLAYABLE_CONFIG, ${JSON.stringify(overrides)});`;
   }

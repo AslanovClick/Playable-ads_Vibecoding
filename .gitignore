@@ -5,3 +5,6 @@ __pycache__/
 .DS_Store
 Thumbs.db
 archive/
+
+# raw clips from the animator (re-encoded into src/video by tools/prepare_assets.py)
+src/animations/

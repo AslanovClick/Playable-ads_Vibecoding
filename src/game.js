@@ -1,36 +1,39 @@
 (function () {
   "use strict";
 
-  var CFG = window.PLAYABLE_CONFIG, T = CFG.text;
-  var W = 1089, H = 1920; // Figma frame
+  var CFG = window.PLAYABLE_CONFIG, T = CFG.text, CLIPS = window.PLAYABLE_CLIPS;
+  var W = 1080, H = 1920; // Figma frame
 
-  // Weapons: crop box of each sprite in its Figma asset frame, and where the grip end and the
-  // head tip are inside the sprite (fractions, printed by tools/prepare_assets.py).
-  var WEAPONS = [
-    { cls: "bat", frame: [1271, 1237], box: [174, 59, 1175, 1154], grip: [0.030, 0.953], tip: [0.948, 0.037] },
-    { cls: "golf", frame: [1254, 1254], box: [102, 36, 1151, 1203], grip: [0.019, 0.981], tip: [0.909, 0.018] },
-    { cls: "hammer", frame: [1254, 1254], box: [153, 36, 1167, 1171], grip: [0.029, 0.955], tip: [0.782, 0.121] }
-  ];
-  // In hand (Figma frames 3-5): the asset frame is 557 px wide, centred here, turned -15deg.
-  var HELD = { cx: 169.2, cy: 1034.8, w: 557, r: -15 };
-  var HOLD_AT = 0.14; // the hands hold it this far along from the grip end: the swing pivot
-  // Weapon panel: slot origins (stage px) and each sprite's box inside its slot (style.css)
-  var PICK = [{ x: 138, y: 1395 }, { x: 421.5, y: 1395 }, { x: 705, y: 1395 }];
-  var IN_SLOT = [[12, -29, 255.5, 280], [13, -35, 251, 280], [13, -18, 241, 270]];
+  var DRESSES = ["black", "burgundy", "red"]; // card order
+  // Seams, measured frame by frame (seconds): where one clip matches the next one best, so the
+  // cross-fade there is nearly invisible. The fade is centred on these points.
+  var SEAM = {
+    red: { wearOut: 2.5, turnIn: 0.88, toUnzip: 3.8 },
+    black: { wearOut: 3.96, turnIn: 0.04, toUnzip: 3.85 },
+    burgundy: { wearOut: 4.8, turnIn: 0.7, toUnzip: 4.33 },
+  };
+  // Loops: jump from `out` back to `in`, where the frames match best (not simply end -> start).
+  var LOOPS = {
+    intro: [5.0, 0.21], choose: [4.29, 0.38],
+    chat_red: [4.67, 0.21], chat_black: [5.0, 0.17], chat_burgundy: [4.58, 0.96],
+  };
+  // The zipper on each dress, seen from the back (stage px): where the pull sits and how far the swipe takes it.
+  var ZIP = {
+    red: { x: 538, y0: 1040, y1: 1390 },
+    black: { x: 536, y0: 878, y1: 1355 },
+    burgundy: { x: 540, y0: 1052, y1: 1330 },
+  };
+  var UNZIP_T = 1.7; // seconds of the unzip clip the swipe scrubs through (it stops before fully open)
 
-  var PINATA = { x: 278.45, y: 418 }; // pinata box (575x831) on the stage
-  // where each strike lands on the pinata (pinata px): the cracks spread from here
-  var HIT_AT = [[325, 400], [318, 430], [300, 520], [300, 560]];
-  var STRIKES = 4;
-
-  var HAND_TIP = [59.6, 37.9]; // fingertip inside the hand sprite
-  var TIP_CHOOSE = [298, 1572], TIP_PLAY = [637, 1056], TIP_CTA = [774, 1478];
+  // Where the chat sits (bottom edge of the newest message) in each scene.
+  var CHAT_Y = { intro: 1418, choose: 1098, wear: 1680, chat: 1418 };
 
   function $(id) { return document.getElementById(id); }
-  var stage = $("stage"), scene = $("scene"), swing = $("swing"), pinata = $("pinata");
-  var weapon = $("weapon"), wimg = weapon.querySelector(".wimg"), panel = $("panel");
-  var hand = $("hand"), taps = $("taps"), cta = $("cta"), title = $("title");
-  var picks = Array.prototype.slice.call(panel.querySelectorAll(".pick"));
+  var stage = $("stage"), videos = $("videos"), chat = $("chat"), title = $("title"), cards = $("cards");
+  var pill = $("pill"), cta = $("cta"), wearBtn = $("wearBtn"), zip = $("zip"), hand = $("hand");
+  var handle = $("handle"), fx = $("fx"), flash = $("flash"), cut = $("cut");
+
+  var Q = (function () { var q = {}; location.search.replace(/[?&]([^=&]+)=?([^&]*)/g, function (_, k, v) { q[k] = v; }); return q; })();
 
   // ---------------------------------------------------------------- layout
   var view = { s: 1, ox: 0, oy: 0 };
@@ -43,514 +46,647 @@
   window.addEventListener("resize", fit);
   window.addEventListener("orientationchange", function () { setTimeout(fit, 120); });
   fit();
-
-  // ---------------------------------------------------------------- text
-  function setGradText(el, h) {
-    el.innerHTML = '<span class="s">' + h + '</span><span class="f">' + h + "</span>";
-    fitText(el);
-  }
-  // Longer copy shrinks to the width given in data-max instead of overflowing.
-  function fitText(el) {
-    var max = parseFloat(el.getAttribute("data-max"));
-    var inner = el.querySelector(".f") || el.firstElementChild;
-    if (!max || !inner) return;
-    el.style.fontSize = "";
-    var w = inner.offsetWidth;
-    if (w > max) el.style.fontSize = parseFloat(getComputedStyle(el).fontSize) * max / w + "px";
-  }
-  var amount = CFG.bonusAmount.toLocaleString(CFG.locale);
-  title.setAttribute("data-html", T.title);
-  $("choose").setAttribute("data-html", T.choose);
-  cta.setAttribute("data-html", T.hits[0]);
-  $("bonus").setAttribute("data-html", T.bonus + "<br><small>" + amount + " " + CFG.bonusUnit + "</small>");
-  $("btnText").firstElementChild.innerHTML = T.cta;
-  var gts = stage.querySelectorAll(".gt");
-  Array.prototype.forEach.call(gts, function (el) { setGradText(el, el.getAttribute("data-html")); });
+  function toStage(e) { return { x: (e.clientX - view.ox) / view.s, y: (e.clientY - view.oy) / view.s }; }
 
   // ---------------------------------------------------------------- helpers
-  function anim(el, frames, opt) {
-    var o = { fill: "forwards" };
-    for (var k in opt) o[k] = opt[k];
-    return el.animate(frames, o);
-  }
-  // Entrance animation that ends on the element's CSS state: drop it afterwards so CSS loops can run.
-  function animIn(el, frames, opt) {
-    var o = { fill: "both" };
-    for (var k in opt) o[k] = opt[k];
-    var a = el.animate(frames, o);
-    a.onfinish = function () { a.cancel(); };
+  var EASE_OUT = "cubic-bezier(0.22, 1, 0.36, 1)";
+  var SPRING = "cubic-bezier(0.34, 1.56, 0.64, 1)";
+  function anim(el, frames, ms, easing, delay) {
+    if (!el.animate) { var last = frames[frames.length - 1]; for (var k in last) if (k !== "offset") el.style[k] = last[k]; return { finished: Promise.resolve(), cancel: function () {} }; }
+    var a = el.animate(frames, { duration: ms, easing: easing || EASE_OUT, delay: delay || 0, fill: "both" });
+    if (!a.finished) a.finished = new Promise(function (r) { a.onfinish = r; });
+    // keep the end state as inline style and drop the animation, so CSS classes work afterwards
+    a.finished.then(function () {
+      var last = frames[frames.length - 1];
+      for (var k in last) if (k !== "offset" && k !== "easing") el.style[k] = last[k];
+      try { a.cancel(); } catch (e) {}
+    }, function () {});
     return a;
   }
-  function rnd(a, b) { return a + Math.random() * (b - a); }
-  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
-  function later(ms, f) { return setTimeout(f, ms); }
-  // cubic-bezier easing as a function (same curve CSS would use)
-  function bezier(x1, y1, x2, y2) {
-    function at(a, b, t) { return 3 * a * t * (1 - t) * (1 - t) + 3 * b * t * t * (1 - t) + t * t * t; }
-    return function (x) {
-      var lo = 0, hi = 1, t = x;
-      for (var i = 0; i < 24; i++) { t = (lo + hi) / 2; if (at(x1, x2, t) < x) lo = t; else hi = t; }
-      return at(y1, y2, t);
+  function show(el, ms, delay, from, to) {
+    return anim(el, [{ opacity: 0, transform: from || "translateY(30px)" }, { opacity: 1, transform: to || "none" }], ms || 500, EASE_OUT, delay);
+  }
+  function hide(el, ms, to) {
+    var o = parseFloat(getComputedStyle(el).opacity) || 0;
+    return anim(el, [{ opacity: o, transform: getComputedStyle(el).transform === "none" ? "none" : getComputedStyle(el).transform }, { opacity: 0, transform: to || "translateY(-20px)" }], ms || 350);
+  }
+  var state = "intro";
+  function later(ms, fn) { var s = state; return setTimeout(function () { if (state === s) fn(); }, ms); }
+  function mk(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html) e.innerHTML = html; return e; }
+
+  // ---------------------------------------------------------------- sound (synthesised, no files)
+  var Sound = (function () {
+    var ctx = null, out = null, noise = null;
+    function init() {
+      if (!CFG.sound) return;
+      try {
+        if (!ctx) {
+          var AC = window.AudioContext || window.webkitAudioContext;
+          ctx = new AC();
+          out = ctx.createGain(); out.gain.value = 0.7; out.connect(ctx.destination);
+          noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+          var d = noise.getChannelData(0);
+          for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+        }
+        if (ctx.state === "suspended") ctx.resume();
+      } catch (e) { ctx = null; }
+    }
+    function ok() { return ctx && ctx.state === "running"; }
+    function tone(f, t, dur, type, vol, f2) {
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = type || "sine";
+      o.frequency.setValueAtTime(f, t);
+      if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.05);
+    }
+    function hiss(t, dur, freq, q, vol, type, attack) {
+      var s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+      s.buffer = noise; s.loop = true;
+      f.type = type || "bandpass"; f.frequency.setValueAtTime(freq, t); f.Q.value = q;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + (attack || 0.002));
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      s.connect(f); f.connect(g); g.connect(out);
+      s.start(t, Math.random() * 0.8); s.stop(t + dur + 0.05);
+      return f;
+    }
+    var lastZip = 0;
+    return {
+      init: init,
+      tap: function () { if (!ok()) return; tone(660, ctx.currentTime, 0.12, "sine", 0.18, 330); },
+      pop: function () { if (!ok()) return; tone(780, ctx.currentTime, 0.09, "triangle", 0.1, 1250); },
+      ping: function () { // incoming message
+        if (!ok()) return; var t = ctx.currentTime;
+        tone(1318.5, t, 0.32, "sine", 0.2); tone(1760, t + 0.085, 0.5, "sine", 0.18); tone(3520, t + 0.085, 0.25, "sine", 0.025);
+      },
+      sparkle: function () {
+        if (!ok()) return; var t = ctx.currentTime;
+        for (var k = 0; k < 5; k++) tone(1900 + Math.random() * 1900, t + k * 0.05, 0.28, "sine", 0.06);
+      },
+      whoosh: function () {
+        if (!ok()) return; var t = ctx.currentTime;
+        var f = hiss(t, 0.9, 400, 0.8, 0.22, "lowpass", 0.35);
+        f.frequency.exponentialRampToValueAtTime(5200, t + 0.45);
+        f.frequency.exponentialRampToValueAtTime(900, t + 0.9);
+        for (var k = 0; k < 6; k++) tone(2200 + k * 330, t + 0.25 + k * 0.05, 0.4, "sine", 0.035);
+      },
+      zip: function (v) { // one tooth of the zipper; called as the finger travels
+        if (!ok()) return; var t = ctx.currentTime;
+        if (t - lastZip < 0.016) return; lastZip = t;
+        hiss(t, 0.028, 2600 + Math.random() * 2400, 2.5, 0.16 + 0.12 * Math.min(1, v || 0));
+        tone(140 + Math.random() * 60, t, 0.02, "square", 0.018);
+      },
+      done: function () {
+        if (!ok()) return; var t = ctx.currentTime;
+        tone(1046.5, t, 0.5, "sine", 0.14); tone(1568, t + 0.07, 0.6, "sine", 0.12); tone(2093, t + 0.14, 0.7, "sine", 0.08);
+      },
+      suspend: function () { try { if (ctx) ctx.suspend(); } catch (e) {} },
+      resume: function () { try { if (ctx) ctx.resume(); } catch (e) {} },
     };
-  }
-
-  function swapText(el, h) {
-    var out = anim(el, [{ opacity: 1, transform: "scale(1)" }, { opacity: 0, transform: "scale(0.8)" }], { duration: 120, easing: "ease-in" });
-    out.onfinish = function () {
-      setGradText(el, h);
-      animIn(el, [
-        { opacity: 0, transform: "scale(1.35)" },
-        { opacity: 1, transform: "scale(0.94)", offset: 0.6 },
-        { opacity: 1, transform: "scale(1)" }
-      ], { duration: 420, easing: "ease-out" });
-      out.cancel();
-    };
-  }
-
-  function placeHand(tip) {
-    hand.style.left = tip[0] - HAND_TIP[0] + "px";
-    hand.style.top = tip[1] - HAND_TIP[1] + "px";
-    taps.style.left = tip[0] - 6 - 75 + "px"; // centred on the fingertip at the press
-    taps.style.top = tip[1] - 6 - 75 + "px";
-  }
-  function setIdle(on) {
-    stage.classList.toggle("idle", on);
-    hand.className = "abs img hand " + (on ? "on" : "off");
-    taps.className = "abs" + (on ? " on" : "");
-  }
-
-  // ---------------------------------------------------------------- weapon geometry
-  // A weapon is drawn by #weapon, which sits on the swing pivot (the hands) and is turned
-  // around it; the sprite inside is offset so that the pivot is at its origin.
-  var held = null; // { w, h, px, py, P: pivot on the stage, r }
-
-  function rot(x, y, deg) {
-    var a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
-    return [x * c - y * s, x * s + y * c];
-  }
-  function heldPose(wp) {
-    var k = HELD.w / wp.frame[0];
-    var w = (wp.box[2] - wp.box[0]) * k, h = (wp.box[3] - wp.box[1]) * k;
-    var left = HELD.cx - wp.frame[0] * k / 2 + wp.box[0] * k;
-    var top = HELD.cy - wp.frame[1] * k / 2 + wp.box[1] * k;
-    var fx = wp.grip[0] + (wp.tip[0] - wp.grip[0]) * HOLD_AT, fy = wp.grip[1] + (wp.tip[1] - wp.grip[1]) * HOLD_AT;
-    var px = fx * w, py = fy * h;
-    var d = rot(left + px - HELD.cx, top + py - HELD.cy, HELD.r);
-    return { wp: wp, w: w, h: h, px: px, py: py, P: [HELD.cx + d[0], HELD.cy + d[1]], r: HELD.r };
-  }
-  function wpose(x, y, r, s) {
-    return "translate(" + x + "px," + y + "px) rotate(" + r + "deg) scale(" + (s || 1) + ")";
-  }
-  function heldAt(a) { return wpose(held.P[0], held.P[1], held.r + a); }
-  // a point along the weapon (0 = grip end, 1 = tip) when swung by a degrees
-  function along(f, a) {
-    var wp = held.wp;
-    var x = (wp.grip[0] + (wp.tip[0] - wp.grip[0]) * f) * held.w - held.px;
-    var y = (wp.grip[1] + (wp.tip[1] - wp.grip[1]) * f) * held.h - held.py;
-    var d = rot(x, y, held.r + a);
-    return [held.P[0] + d[0], held.P[1] + d[1]];
-  }
-
-  // ---------------------------------------------------------------- particles (one canvas)
-  var fx = { cv: $("fx"), ctx: null, k: 1, list: [], run: false, last: 0, rain: 0 };
-  function sprite(size, draw) {
-    var c = document.createElement("canvas");
-    c.width = c.height = size;
-    draw(c.getContext("2d"), size);
-    return c;
-  }
-  var DOT = sprite(64, function (g, n) { // soft glow
-    var r = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
-    r.addColorStop(0, "rgba(255,255,245,1)");
-    r.addColorStop(0.25, "rgba(255,232,150,0.9)");
-    r.addColorStop(0.6, "rgba(255,170,50,0.35)");
-    r.addColorStop(1, "rgba(255,140,0,0)");
-    g.fillStyle = r;
-    g.fillRect(0, 0, n, n);
-  });
-  // Coins cut out of the burst art (tools/prepare_assets.py): one strip of cells, each a coin
-  // seen at its own angle, so the flying coins look like the coins in the picture.
-  var COIN_CELL = 192, COIN_N = 9, COIN_SHEET = new Image();
-  (function () {
-    var m = /url\(["']?([^"')]+)["']?\)/.exec(getComputedStyle(document.documentElement).getPropertyValue("--img-coin"));
-    if (m) COIN_SHEET.src = m[1];
   })();
-  var PAPER = ["#ff2d55", "#ffd400", "#21d07a", "#ff4fd8", "#1fb6ff", "#ff7a00", "#9b5cff"];
-  var CHIPS = ["#e8121c", "#ff3b2f", "#25b832", "#ffcf1f", "#ff4fd8", "#1d9bf0"]; // pinata colours
 
-  function fxStart() {
-    if (!fx.ctx) {
-      var dpr = window.devicePixelRatio || 1;
-      fx.k = Math.min(1, view.s * dpr);
-      fx.cv.width = Math.round(W * fx.k);
-      fx.cv.height = Math.round(H * fx.k);
-      fx.ctx = fx.cv.getContext("2d");
-    }
-    if (!fx.run) { fx.run = true; fx.last = performance.now(); requestAnimationFrame(fxFrame); }
-  }
-  function add(p) { fx.list.push(p); fxStart(); }
+  // ---------------------------------------------------------------- video player
+  // Three stacked <video> layers. A new clip starts on a free layer and fades in over the current one
+  // once its first frame is on screen; loops fade into a fresh copy of themselves instead of jumping.
+  var Player = (function () {
+    var els = Array.prototype.slice.call(videos.querySelectorAll("video"));
+    var cur = null, z = 1, urls = {};
+    els.forEach(function (v) { v.muted = true; v.setAttribute("muted", ""); v.playsInline = true; v._clip = null; });
 
-  function sparks(x, y, n, o) {
-    o = o || {};
-    for (var i = 0; i < n; i++) {
-      var a = (o.angle || 0) + rnd(-0.5, 0.5) * (o.spread != null ? o.spread : Math.PI * 2), sp = rnd(0.25, 1) * (o.speed || 1.1);
-      add({ t: "spark", x: x + rnd(-8, 8), y: y + rnd(-8, 8), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 0.0016, drag: 0.992, age: 0, life: rnd(350, 750), size: rnd(14, 34) * (o.size || 1) });
-    }
-  }
-  function chips(x, y, n, o) { // paper bits of the pinata
-    o = o || {};
-    for (var i = 0; i < n; i++) {
-      var a = (o.angle || 0) + rnd(-0.5, 0.5) * (o.spread != null ? o.spread : Math.PI * 2), sp = rnd(0.3, 1) * (o.speed || 0.9);
-      add({ t: "paper", x: x + rnd(-15, 15), y: y + rnd(-15, 15), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 0.0022, drag: 0.985,
-        rot: rnd(0, 6.3), vr: rnd(-0.02, 0.02), flip: rnd(0, 6.3), vf: rnd(0.01, 0.03),
-        w: rnd(14, 30) * (o.size || 1), h: rnd(10, 22) * (o.size || 1), c: pick(o.colors || CHIPS), age: 0, life: rnd(700, 1300) });
-    }
-  }
-  // "pop": thrown up and out by the blast; "pour": spilling down out of the opening over a
-  // moment. Coins with a floor land on the cobbles, bounce and settle.
-  function coins(x, y, n, o) {
-    o = o || {};
-    for (var i = 0; i < n; i++) {
-      var pour = o.mode === "pour";
-      var a = pour ? Math.PI / 2 + rnd(-0.95, 0.95) : -Math.PI / 2 + rnd(-1.3, 1.3);
-      var sp = pour ? rnd(0.15, 0.6) : rnd(0.55, 1.25);
-      add({ t: "coin", x: x + rnd(-1, 1) * (o.jx || 50), y: y + rnd(-1, 1) * (o.jy || 50), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, g: 0.0032, drag: 0.997,
-        delay: pour ? rnd(0, o.stagger || 450) : 0, k: Math.floor(rnd(0, COIN_N)), s: rnd(0.42, 0.72) * (o.size || 1),
-        rot: rnd(-0.6, 0.6), vr: rnd(-0.004, 0.004), tumble: rnd(0, 6.3), vt: rnd(0.006, 0.014),
-        floor: o.floor ? rnd(1470, 1620) : 0, bounces: 0, age: 0, life: o.life || 2600 });
-    }
-  }
-  function confettiRain(ms) { fx.rain = performance.now() + ms; fxStart(); }
-
-  function fxFrame(now) {
-    var dt = Math.min(40, now - fx.last), ctx = fx.ctx;
-    fx.last = now;
-    if (fx.rain > now && fx.list.length < 90 && Math.random() < dt / 45) {
-      add({ t: "paper", x: rnd(0, W), y: -30, vx: rnd(-0.05, 0.05), vy: rnd(0.12, 0.22), g: 0, drag: 1, sway: rnd(0, 6.3),
-        rot: rnd(0, 6.3), vr: rnd(-0.004, 0.004), flip: rnd(0, 6.3), vf: rnd(0.006, 0.014),
-        w: rnd(16, 26), h: rnd(10, 16), c: pick(PAPER), age: 0, life: 12000 });
-    }
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.clearRect(0, 0, fx.cv.width, fx.cv.height);
-    ctx.setTransform(fx.k, 0, 0, fx.k, 0, 0);
-    for (var i = fx.list.length - 1; i >= 0; i--) {
-      var p = fx.list[i];
-      if (p.delay > 0) { p.delay -= dt; continue; }
-      p.age += dt;
-      if (p.age >= p.life || p.y > H + 80) { fx.list.splice(i, 1); continue; }
-      p.vy += p.g * dt; p.vx *= Math.pow(p.drag, dt / 16); p.vy *= Math.pow(p.drag, dt / 16);
-      p.x += p.vx * dt; p.y += p.vy * dt;
-      var k = p.age / p.life, fade = k > 0.75 ? (1 - k) / 0.25 : 1;
-      if (p.t === "spark") {
-        ctx.globalCompositeOperation = "lighter";
-        ctx.globalAlpha = fade;
-        var s = p.size * (1 - k * 0.6);
-        ctx.drawImage(DOT, p.x - s / 2, p.y - s / 2, s, s);
-        ctx.globalCompositeOperation = "source-over";
-      } else if (p.t === "paper") {
-        if (p.sway != null) p.x += Math.sin(p.age / 400 + p.sway) * 0.25;
-        p.rot += p.vr * dt; p.flip += p.vf * dt;
-        ctx.globalAlpha = fade;
-        ctx.save();
-        ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.scale(1, Math.cos(p.flip));
-        ctx.fillStyle = p.c;
-        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
-        ctx.restore();
-      } else { // coin: tumbles (never edge-on, the art already shows it at an angle) and turns
-        if (p.floor && p.y > p.floor && p.vy > 0) { // lands on the cobbles
-          p.y = p.floor;
-          if (p.bounces++ < 2) { p.vy *= -0.32; p.vx *= 0.55; p.vr *= 0.5; }
-          else { p.vy = 0; p.g = 0; p.vx *= 0.5; p.vt *= 0.5; }
-        }
-        p.rot += p.vr * dt; p.tumble += p.vt * dt;
-        var face = Math.cos(p.tumble), sx = 0.62 + 0.38 * Math.abs(face);
-        ctx.globalAlpha = fade;
-        ctx.save();
-        ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.scale(sx * p.s, p.s);
-        if (COIN_SHEET.complete && COIN_SHEET.naturalWidth) ctx.drawImage(COIN_SHEET, p.k * COIN_CELL, 0, COIN_CELL, COIN_CELL, -COIN_CELL / 2, -COIN_CELL / 2, COIN_CELL, COIN_CELL);
-        if (face > 0.9) { // a glint as it turns to face the light
-          ctx.globalCompositeOperation = "lighter";
-          ctx.globalAlpha = fade * (face - 0.9) * 10;
-          ctx.drawImage(DOT, -COIN_CELL * 0.3, -COIN_CELL * 0.32, COIN_CELL * 0.4, COIN_CELL * 0.4);
-          ctx.globalCompositeOperation = "source-over";
-        }
-        ctx.restore();
+    function url(name) {
+      if (urls[name]) return urls[name];
+      var s = CLIPS[name];
+      if (s.indexOf("data:") === 0) {
+        var bin = atob(s.slice(s.indexOf(",") + 1)), n = bin.length, arr = new Uint8Array(n);
+        for (var i = 0; i < n; i++) arr[i] = bin.charCodeAt(i);
+        s = URL.createObjectURL(new Blob([arr], { type: "video/mp4" }));
       }
+      return (urls[name] = s);
     }
-    ctx.globalAlpha = 1;
-    if (fx.list.length || fx.rain > now) requestAnimationFrame(fxFrame);
-    else { fx.run = false; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, fx.cv.width, fx.cv.height); }
-  }
-
-  // ---------------------------------------------------------------- 1. choose a weapon
-  var state = "wait", strikes = 0, busy = false, queued = false;
-
-  function toStage(e) {
-    var t = e.touches && e.touches[0] ? e.touches[0] : e;
-    return { x: (t.clientX - view.ox) / view.s, y: (t.clientY - view.oy) / view.s };
-  }
-
-  function onPress(e) {
-    if (e.cancelable) e.preventDefault();
-    if (state === "choose") {
-      var el = e.target.closest ? e.target.closest(".pick") : null, i = 0;
-      if (el) i = +el.getAttribute("data-w");
-      else { // anywhere else: the slot nearest to the tap
-        var p = toStage(e), best = 1e9;
-        PICK.forEach(function (s, k) { var d = Math.abs(s.x + 123 - p.x); if (d < best) { best = d; i = k; } });
+    function load(v, name) {
+      if (v._clip !== name) { v._clip = name; v.src = url(name); try { v.load(); } catch (e) {} }
+    }
+    // a layer for this clip: one that already holds it, else the oldest free one
+    function pick(name) {
+      // not the one on screen, not one about to come up, not one still fading out
+      var free = els.filter(function (v) { return v !== cur && !v._busy; });
+      if (!free.length) free = els.filter(function (v) { return v !== cur; });
+      var has = free.filter(function (v) { return v._clip === name; });
+      if (has.length) return has[0];
+      var open = free.filter(function (v) { return !v._reserved; });
+      (open.length ? open : free).sort(function (a, b) { return (+a.style.zIndex || 0) - (+b.style.zIndex || 0); });
+      return (open.length ? open : free)[0];
+    }
+    function firstFrame(v, cb) {
+      var done = false;
+      function go() { if (!done) { done = true; cb(); } }
+      if (v.requestVideoFrameCallback) v.requestVideoFrameCallback(function () { go(); });
+      v.addEventListener("playing", function h() { v.removeEventListener("playing", h); setTimeout(go, 50); });
+      v.addEventListener("seeked", function h() { v.removeEventListener("seeked", h); if (v.paused) setTimeout(go, 30); });
+      setTimeout(go, 900);
+    }
+    function bringUp(v, fade) {
+      var prev = cur;
+      cur = v;
+      v._busy = false;
+      if (prev && prev !== v) prev._busy = true;
+      v.style.zIndex = ++z;
+      v.style.transition = "none";
+      v.style.opacity = 0;
+      void v.offsetWidth;
+      v.style.transition = "opacity " + fade + "s ease-in-out";
+      v.style.opacity = 1;
+      if (prev && prev !== v) setTimeout(function () {
+        prev._busy = false;
+        if (cur === prev) return;
+        prev.style.transition = "none"; prev.style.opacity = 0;
+        try { prev.pause(); } catch (e) {}
+      }, fade * 1000 + 80);
+      $("poster").style.opacity = 0;
+    }
+    function play(name, o) {
+      o = o || {};
+      var v = pick(name), fade = o.fade == null ? 0.4 : o.fade;
+      v._reserved = false;
+      v._busy = true;
+      els.forEach(function (x) { if (x !== v && x._o && x !== cur && !x._busy) x._o = null; }); // superseded
+      load(v, name);
+      v._o = o; v._fired = false;
+      try { v.currentTime = o.at || 0; } catch (e) {}
+      var p = v.play();
+      if (p && p.catch) p.catch(function () { blocked = true; });
+      firstFrame(v, function () { if (v._o === o) bringUp(v, fade); });
+      return v;
+    }
+    // shows a clip paused on its first frame (the unzip clip, which the finger then scrubs)
+    // (preload() has already decoded it and parked it on frame 0)
+    var scrub = null;
+    function still(name, fade) {
+      var v = pick(name);
+      v._reserved = false;
+      v._busy = true;
+      v._o = { still: true }; v._fired = true;
+      scrub = v;
+      var o = v._o, up = function () { if (v._o === o) bringUp(v, fade == null ? 0.25 : fade); };
+      if (v._clip === name && v.readyState >= 2) { v.pause(); up(); return v; }
+      load(v, name);
+      v.addEventListener("loadeddata", function h() { v.removeEventListener("loadeddata", h); up(); });
+      setTimeout(up, 900);
+      return v;
+    }
+    function preload(name) {
+      var v = pick(name);
+      if (v._clip === name) { v._reserved = true; return; }
+      load(v, name); v._reserved = true;
+      // decode the first frame ahead of time
+      var p = v.play();
+      if (p && p.then) p.then(function () { if (v !== cur && !v._busy) { v.pause(); try { v.currentTime = 0; } catch (e) {} } }, function () {});
+    }
+    var seeking = false, want = null;
+    function seek(t) {
+      var v = scrub;
+      if (!v) return;
+      want = t;
+      if (seeking) return;
+      seeking = true;
+      try { if (v.fastSeek && Math.abs(v.currentTime - t) > 0.6) v.fastSeek(t); else v.currentTime = t; } catch (e) { seeking = false; return; }
+      var done = function () {
+        v.removeEventListener("seeked", done);
+        seeking = false;
+        if (want != null && Math.abs(want - v.currentTime) > 0.02) seek(want);
+      };
+      v.addEventListener("seeked", done);
+      setTimeout(function () { if (seeking) done(); }, 400);
+    }
+    var queued = null; // a clip to switch to at the next loop point instead of looping
+    function tick() {
+      var v = cur;
+      if (v && v._o && !v._fired && !v.paused && v.duration) {
+        var o = v._o, d = v.duration, t = v.currentTime;
+        var lf = o.loopFade || 0.45, lp = LOOPS[v._clip] || [d, 0];
+        if (o.loop && t >= Math.min(lp[0], d - 0.05) - lf / 2) {
+          v._fired = true;
+          if (queued) { var q = queued; queued = null; play(q.name, q.o); }
+          else play(v._clip, { loop: true, fade: lf, loopFade: o.loopFade, at: Math.max(0, lp[1] - lf / 2) });
+        } else if (o.onEnd && t >= (o.endAt || d - 0.45)) {
+          v._fired = true;
+          o.onEnd();
+        }
       }
-      choose(i);
-    } else if (state === "play") {
-      if (busy) queued = true;
-      else strike();
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+    var blocked = false, hidden = [];
+    return {
+      play: play, still: still, preload: preload, seek: seek,
+      // switch to this clip where the current loop would jump back (a seamless join), not right now
+      atLoop: function (name, o) { if (!cur || cur.paused) play(name, o); else queued = { name: name, o: o }; },
+      // lets the scrubbed clip play on by itself from where the finger left it
+      release: function () { if (scrub) { want = null; var p = scrub.play(); if (p && p.catch) p.catch(function () {}); } },
+      // autoplay was refused (low-power mode etc): retry inside the first tap
+      kick: function () { if (blocked && cur) { blocked = false; var p = cur.play(); if (p && p.catch) p.catch(function () {}); } },
+      pause: function () { hidden = els.filter(function (v) { return !v.paused; }); hidden.forEach(function (v) { v.pause(); }); },
+      resume: function () { hidden.forEach(function (v) { var p = v.play(); if (p && p.catch) p.catch(function () {}); }); hidden = []; },
+      get cur() { return cur; },
+    };
+  })();
+
+  // ---------------------------------------------------------------- title
+  // Fades and settles in as a whole, then "breathes": a slow scale and glow, nothing jumps.
+  function showTitle(text) {
+    title.innerHTML = "";
+    var t = mk("span", "tt");
+    t.textContent = text;
+    title.appendChild(t);
+    anim(title, [
+      { opacity: 0, transform: "scale(0.94)", filter: "blur(8px)" },
+      { opacity: 1, transform: "scale(1)", filter: "blur(0px)" },
+    ], 900, "cubic-bezier(0.25, 0.8, 0.25, 1)");
+  }
+  function hideTitle() {
+    anim(title, [
+      { opacity: 1, transform: "scale(1)", filter: "blur(0px)" },
+      { opacity: 0, transform: "scale(0.97)", filter: "blur(6px)" },
+    ], 450, "ease-in");
+  }
+
+  // ---------------------------------------------------------------- chat
+  var lastRow = null;
+  function chatAt(y, instant) {
+    if (instant) { chat.style.transition = "none"; chat.style.bottom = (H - y) + "px"; void chat.offsetWidth; chat.style.transition = ""; }
+    else chat.style.bottom = (H - y) + "px";
+  }
+  // Moves the rows already there up by however much the new row pushes them, smoothly.
+  function flipRows(change) {
+    var rows = Array.prototype.slice.call(chat.children);
+    var before = rows.map(function (r) { return r.getBoundingClientRect().top; });
+    change();
+    rows.forEach(function (r, i) {
+      var d = (before[i] - r.getBoundingClientRect().top) / view.s;
+      if (Math.abs(d) > 1) anim(r, [{ transform: "translateY(" + d + "px)" }, { transform: "none" }], 450, EASE_OUT);
+    });
+  }
+  // An incoming message: "typing…" first, then the text pops in with a ping.
+  function say(text, typing, then) {
+    var row = mk("div", "msg"), ava = mk("i", "ava"), bw = mk("div", "bw");
+    var dots = mk("div", "bub typing", "<i></i><i></i><i></i>");
+    row.appendChild(ava); row.appendChild(bw); bw.appendChild(dots);
+    var cont = lastRow && lastRow.parentNode === chat;
+    if (cont) row.classList.add("cont");
+    lastRow = row;
+    flipRows(function () { chat.appendChild(row); });
+    if (!cont) anim(ava, [{ transform: "scale(0)", opacity: 0 }, { transform: "scale(1)", opacity: 1 }], 450, SPRING);
+    anim(dots, [{ transform: "scale(0.3)", opacity: 0 }, { transform: "scale(1)", opacity: 1 }], 420, SPRING);
+    Sound.pop();
+    setTimeout(function () {
+      if (!row.parentNode || row.classList.contains("gone")) return; // the chat was cleared meanwhile
+      var bub = mk("div", "bub");
+      bub.textContent = text;
+      flipRows(function () { bw.replaceChild(bub, dots); });
+      anim(bub, [
+        { transform: "scale(0.55)", opacity: 0, filter: "blur(6px)" },
+        { transform: "scale(1.03)", opacity: 1, filter: "blur(0)", offset: 0.65 },
+        { transform: "scale(1)", opacity: 1, filter: "blur(0)" },
+      ], 520, "cubic-bezier(0.3, 0.9, 0.4, 1)");
+      Sound.ping();
+      if (then) then(row);
+    }, typing == null ? 800 : typing);
+    return row;
+  }
+  function clearChat(ms) {
+    lastRow = null;
+    Array.prototype.forEach.call(chat.children, function (r, i) {
+      r.classList.add("gone");
+      anim(r, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-50px) scale(0.96)" }], ms || 380, "ease-in", i * 50)
+        .finished.then(function () { if (r.parentNode) r.parentNode.removeChild(r); });
+    });
+  }
+
+  // ---------------------------------------------------------------- effects
+  function sparks(x, y, n, spread, size) {
+    for (var i = 0; i < n; i++) {
+      var s = mk("i", "spark");
+      var a = Math.random() * Math.PI * 2, r = spread * (0.4 + Math.random() * 0.6), sc = (size || 1) * (0.5 + Math.random() * 0.9);
+      s.style.left = x + "px"; s.style.top = y + "px";
+      fx.appendChild(s);
+      anim(s, [
+        { transform: "translate(0,0) scale(0) rotate(0deg)", opacity: 1 },
+        { transform: "translate(" + Math.cos(a) * r * 0.6 + "px," + Math.sin(a) * r * 0.6 + "px) scale(" + sc + ") rotate(90deg)", opacity: 1, offset: 0.5 },
+        { transform: "translate(" + Math.cos(a) * r + "px," + (Math.sin(a) * r + 30) + "px) scale(0) rotate(180deg)", opacity: 0 },
+      ], 700 + Math.random() * 500, "cubic-bezier(0.2, 0.7, 0.3, 1)", Math.random() * 120)
+        .finished.then(function (el) { return function () { el.remove(); }; }(s));
     }
   }
-
-  function choose(i) {
-    state = "arming";
-    setIdle(false);
-    stage.classList.remove("choosing");
-    var el = picks[i], icon = el.querySelector(".w");
-    el.classList.add("on");
-    animIn(icon, [{ transform: "scale(1)" }, { transform: "scale(1.22) rotate(-6deg)", offset: 0.4 }, { transform: "scale(1)" }], { duration: 420, easing: "ease-out" });
-    sparks(PICK[i].x + 123, PICK[i].y + 123, 16, { speed: 0.7, size: 0.9 });
-
-    // the weapon leaves its slot and flies up into the hands at the left
-    var wp = WEAPONS[i];
-    held = heldPose(wp);
-    dressWeapon(wp);
-    var b = IN_SLOT[i], s = b[2] / held.w;
-    var from = [PICK[i].x + b[0] + held.px * s, PICK[i].y + b[1] + held.py * s];
-    later(FLY_AT, function () {
-      icon.style.visibility = "hidden"; // the flying weapon takes its place exactly
-      // the selection glow of the slot hands over to the glow the weapon carries with it
-      anim(el.querySelector(".dust"), [{ opacity: 1 }, { opacity: 0 }], { duration: 260 });
-      anim(el.querySelector(".frameGold"), [{ opacity: 1 }, { opacity: 0 }], { duration: 260 });
-      stage.classList.add("armed");
-      fly(from, s, FLY_MS);
-      later(140, function () {
-        panel.classList.add("gone");
-        $("choose").classList.add("gone");
-      });
-    });
-    later(FLY_AT + FLY_MS - 120, function () {
-      cta.style.opacity = 1;
-      animIn(cta, [{ opacity: 0, transform: "translateY(40px) scale(0.85)" }, { opacity: 1, transform: "none" }], { duration: 420, easing: "cubic-bezier(.2,.9,.3,1.15)" });
-    });
-    later(FLY_AT + FLY_MS + 60, function () {
-      placeHand(TIP_PLAY);
-      state = "play";
-      setIdle(true);
-      auto();
-    });
+  function tapRing(p) {
+    var r = mk("i", "tapring");
+    r.style.left = p.x + "px"; r.style.top = p.y + "px";
+    fx.appendChild(r);
+    anim(r, [{ transform: "scale(0.3)", opacity: 1 }, { transform: "scale(1.6)", opacity: 0 }], 550, EASE_OUT).finished.then(function () { r.remove(); });
   }
 
-  // The weapon sprite and its glow (soft light behind it, golden dust) are one group that sits
-  // on the swing pivot, so the glow moves, turns and scales with the weapon. The glow is placed
-  // where Figma has it around the held bat.
-  var GLOW_LIGHT = { x: 185, y: 1026.5, r: 24.68 }, GLOW_DUST = { x: 224.5, y: 929, r: -75 };
-  function dressWeapon(wp) {
-    wimg.className = "wimg abs img " + wp.cls;
-    wimg.style.cssText = "left:" + -held.px + "px;top:" + -held.py + "px;width:" + held.w + "px;height:" + held.h + "px";
-    [[".wlight", GLOW_LIGHT, 528, 998], [".wdust", GLOW_DUST, 420, 280]].forEach(function (g) {
-      var d = rot(g[1].x - held.P[0], g[1].y - held.P[1], -held.r);
-      weapon.querySelector(g[0]).style.cssText = "left:" + (d[0] - g[2] / 2) + "px;top:" + (d[1] - g[3] / 2) + "px;" +
-        "transform:rotate(" + (g[1].r - held.r) + "deg)";
-    });
-  }
+  // ---------------------------------------------------------------- static copy
+  $("pillName").textContent = T.name;
+  $("pillRole").textContent = T.role;
+  $("legal").textContent = T.legal;
+  cta.querySelector(".t").textContent = T.start;
+  wearBtn.querySelector(".t").textContent = T.wear;
 
-  // One smooth flight along a curve: up and over to the left, turning into the held angle and
-  // growing to full size, with a single ease over the whole way and a small settle at the end.
-  var FLY_AT = 420, FLY_MS = 820, FLY_EASE = bezier(0.42, 0, 0.2, 1); // starts when the pick pop ends
-  function fly(from, s0, dur) {
-    var to = held.P, c = [(from[0] + to[0]) / 2 - 30, Math.min(from[1], to[1]) - 260];
-    var frames = [], N = 36;
-    for (var k = 0; k <= N; k++) {
-      var t = FLY_EASE(k / N), u = 1 - t;
-      var x = u * u * from[0] + 2 * u * t * c[0] + t * t * to[0];
-      var y = u * u * from[1] + 2 * u * t * c[1] + t * t * to[1];
-      var r = held.r * t - 14 * Math.sin(Math.PI * t); // leans back a little on the way
-      var sc = s0 + (1 - s0) * t + 0.07 * Math.sin(Math.PI * Math.min(1, t * 1.15)); // swells, then settles
-      frames.push({ transform: wpose(x, y, r, sc), offset: k / N });
-    }
-    weapon.style.transform = frames[0].transform; // already in the slot on the very first frame
-    weapon.style.visibility = "visible";
-    anim(weapon, frames, { duration: dur, easing: "linear" });
-    [".wlight", ".wdust"].forEach(function (g) { // the glow fades in as the slot's glow fades out
-      animIn(weapon.querySelector(g), [{ opacity: 0 }, { opacity: 1 }], { duration: dur * 0.6, easing: "ease-out" });
-    });
-    later(dur - 40, function () { sparks(to[0] + 70, to[1] - 200, 14, { speed: 0.6, size: 0.8 }); });
-  }
-
-  // ---------------------------------------------------------------- 2. strikes
-  var SWING_MS = 520, IMPACT = 0.42, SWING = 25; // swing duration, impact moment, swing angle
-  var clipOK = window.CSS && CSS.supports && CSS.supports("clip-path", "circle(1px at 1px 1px)");
-
-  function strike() {
-    busy = true;
-    setIdle(false);
-    var n = ++strikes;
-    // wind up, swing through, settle back
-    anim(weapon, [
-      { transform: heldAt(0) },
-      { transform: heldAt(-16), offset: 0.24, easing: "cubic-bezier(.4,0,1,1)" },
-      { transform: heldAt(SWING), offset: IMPACT, easing: "ease-out" },
-      { transform: heldAt(SWING - 7), offset: 0.56, easing: "ease-in-out" },
-      { transform: heldAt(0) }
-    ], { duration: SWING_MS, easing: "ease-out" });
-    later(SWING_MS * IMPACT, function () { impact(n); });
-    if (n < STRIKES) later(SWING_MS + 60, function () {
-      busy = false;
-      if (queued) { queued = false; strike(); }
-      else { setIdle(true); auto(); }
-    });
-  }
-
-  function impact(n) {
-    var c = along(0.84, SWING); // where the weapon meets the pinata
-    var h = HIT_AT[n - 1], hx = PINATA.x + h[0], hy = PINATA.y + h[1];
-    var hard = n === STRIKES;
-
-    // the pinata is knocked away from the weapon and swings back on its rope
-    var amp = -(hard ? 9 : 5 + n); // negative: the bottom swings right, away from the weapon
-    anim(swing, [
-      { transform: "rotate(0deg)" }, { transform: "rotate(" + amp + "deg)", offset: 0.18 },
-      { transform: "rotate(" + -amp * 0.55 + "deg)", offset: 0.42 }, { transform: "rotate(" + amp * 0.28 + "deg)", offset: 0.66 },
-      { transform: "rotate(" + -amp * 0.1 + "deg)", offset: 0.85 }, { transform: "rotate(0deg)" }
-    ], { duration: hard ? 1500 : 1250, easing: "ease-out" });
-    animIn(pinata, [{ transform: "scale(1)" }, { transform: "scale(1.06,0.94)", offset: 0.3 }, { transform: "scale(0.98,1.02)", offset: 0.65 }, { transform: "scale(1)" }], { duration: 300 });
-    var j = hard ? 18 : 9;
-    animIn(scene, [
-      { transform: "translate(0,0)" }, { transform: "translate(" + j + "px," + -j * 0.6 + "px)" }, { transform: "translate(" + -j * 0.8 + "px," + j * 0.5 + "px)" },
-      { transform: "translate(" + j * 0.5 + "px," + j * 0.3 + "px)" }, { transform: "translate(0,0)" }
-    ], { duration: hard ? 320 : 220 });
-
-    sparks(c[0], c[1], hard ? 30 : 18, { speed: 1.1 });
-    chips(c[0], c[1], hard ? 0 : 7 + n * 3, { angle: -0.4, spread: 2.6 });
-    if (n < STRIKES) crack(n, h);
-    else burst(hx, hy);
-    if (n < STRIKES) swapText(cta, T.hits[n]);
-  }
-
-  // a new, bigger crack spreads from the hit point over the previous one, its glow flares up
-  function crack(n, h) {
-    var hot = pinata.querySelector(".hit");
-    hot.style.left = h[0] + "px";
-    hot.style.top = h[1] + "px";
-    anim(hot, [{ opacity: 0, transform: "scale(0.3)" }, { opacity: 1, transform: "scale(1)", offset: 0.25 }, { opacity: 0, transform: "scale(1.5)" }], { duration: 520, easing: "ease-out" });
-
-    var el = pinata.querySelector(".c" + n), prev = pinata.querySelector(".c" + (n - 1));
-    var glow = pinata.querySelector(".g" + n), prevGlow = pinata.querySelector(".g" + (n - 1));
-    el.classList.add("on");
-    var a;
-    if (clipOK) {
-      var at = " at " + h[0] + "px " + h[1] + "px)";
-      a = animIn(el, [{ clipPath: "circle(0px" + at }, { clipPath: "circle(760px" + at }], { duration: 520, easing: "cubic-bezier(.15,.75,.35,1)" });
-    } else a = animIn(el, [{ opacity: 0 }, { opacity: 1 }], { duration: 300 });
-    a.onfinish = function () { a.cancel(); if (prev) prev.classList.remove("on"); };
-
-    glow.classList.add("on");
-    animIn(glow, [{ opacity: 0 }, { opacity: 1, offset: 0.2 }, { opacity: 1, offset: 0.55 }, { opacity: 0.75 }], { duration: 700 });
-    if (prevGlow) {
-      var g = anim(prevGlow, [{ opacity: 0.8 }, { opacity: 0 }], { duration: 400 });
-      g.onfinish = function () { prevGlow.classList.remove("on"); g.cancel(); };
-    }
-  }
-
-  // ---------------------------------------------------------------- 3. burst and prize
-  function burst(hx, hy) {
-    state = "burst";
-    var b = $("burst");
-    anim($("flash"), [{ opacity: 0 }, { opacity: 0.9, offset: 0.15 }, { opacity: 0 }], { duration: 750, easing: "ease-out" });
-    pinata.style.visibility = "hidden";
-    b.style.visibility = "visible";
-    // the burst frame (coins pouring out) stays: it is the last pinata state
-    animIn(b, [{ transform: "scale(0.9)" }, { transform: "scale(1.06)", offset: 0.35 }, { transform: "scale(0.99)", offset: 0.7 }, { transform: "scale(1)" }], { duration: 700, easing: "ease-out" });
-    coins(hx, hy, 16, { floor: true }); // blown out
-    coins(hx, hy + 40, 30, { mode: "pour", floor: true, jx: 70, jy: 40, stagger: 520 }); // spilling out
-    chips(hx, hy, 34, { speed: 1.3, size: 1.3 });
-    chips(hx, hy, 24, { speed: 1.1, colors: PAPER });
-    sparks(hx, hy, 34, { speed: 1.4, size: 1.3 });
-
-    stage.classList.remove("armed", "idle-sway");
-    anim(weapon, [{ transform: heldAt(0), opacity: 1 }, { transform: wpose(held.P[0] - 260, held.P[1] + 140, held.r - 30), opacity: 0 }], { duration: 500, delay: 350, easing: "ease-in" });
-    anim(cta, [{ opacity: 1 }, { opacity: 0, transform: "translateY(40px)" }], { duration: 300, delay: 200 });
-    later(1050, prize);
-  }
-
-  function prize() {
-    state = "end";
-    var pop = $("popup");
-    anim($("dim"), [{ opacity: 0 }, { opacity: 1 }], { duration: 450 });
-    pop.classList.add("on");
-    pop.style.opacity = 1;
-    animIn(pop, [
-      { opacity: 0, transform: "translateY(80px) scale(0.86)" },
-      { opacity: 1, transform: "scale(1.02)", offset: 0.7 },
-      { opacity: 1, transform: "none" }
-    ], { duration: 520, easing: "ease-out" });
-    animIn(pop.querySelector(".coins"), [
-      { transform: "translateY(-260px) scale(0.5)", opacity: 0 },
-      { transform: "translateY(16px) scale(1.06)", opacity: 1, offset: 0.65 },
-      { transform: "translateY(0) scale(1)", opacity: 1 }
-    ], { duration: 650, delay: 160, easing: "ease-out" });
-    animIn($("bonus"), [{ opacity: 0, transform: "scale(0.6)" }, { opacity: 1, transform: "scale(1.08)", offset: 0.6 }, { opacity: 1, transform: "none" }], { duration: 480, delay: 380, easing: "ease-out" });
-    animIn($("btn"), [{ opacity: 0, transform: "translateY(60px) scale(0.9)" }, { opacity: 1, transform: "none" }], { duration: 440, delay: 560, easing: "cubic-bezier(.2,.9,.3,1.15)" });
-    later(450, function () {
-      sparks(544, 790, 26, { speed: 1, size: 1.2 });
-      coins(544, 780, 12, { size: 0.8, life: 2200 });
-      confettiRain(1e9);
-    });
-    stage.classList.add("end");
-    AD.gameEnd();
-    later(1100, function () {
-      stage.classList.add("cta");
-      placeHand(TIP_CTA);
-      hand.className = "abs img hand on";
-    });
-  }
-
-  function onCta(e) {
-    if (e) e.stopPropagation();
-    AD.click(CFG.clickUrl);
-  }
-
-  // ---------------------------------------------------------------- input & start
-  if (window.PointerEvent) stage.addEventListener("pointerdown", onPress);
-  else {
-    stage.addEventListener("touchstart", onPress, { passive: false });
-    stage.addEventListener("mousedown", onPress);
-  }
-  $("popup").addEventListener("pointerdown", function (e) { if (state === "end") onCta(e); });
-
-  // QA hooks: ?w=0..2 picks that weapon, &auto=1 keeps striking, ?end=1 jumps to the prize
-  var qs = location.search, qw = /[?&]w=(\d)/.exec(qs), qauto = /[?&]auto=1/.test(qs);
-  function auto() {
-    if (state === "choose" && qw) later(700, function () { if (state === "choose") choose(+qw[1] % 3); });
-    if (state === "play" && qauto) later(650, function () { if (state === "play" && !busy) strike(); });
-  }
-
-  var started = false;
-  function start() {
-    if (started) return;
-    started = true;
-    fit();
-    Array.prototype.forEach.call(gts, fitText); // re-measure with the web font loaded
-    fitText($("btnText"));
-    stage.classList.remove("loading");
-    stage.classList.add("choosing", "idle-sway");
-    placeHand(TIP_CHOOSE);
-    state = "choose";
-    setIdle(true);
-    AD.gameReady();
-    if (/[?&]end=1/.test(qs)) { setIdle(false); panel.classList.add("gone"); $("choose").classList.add("gone"); pinata.style.visibility = "hidden"; $("burst").style.visibility = "visible"; prize(); return; }
-    auto();
-  }
-
-  AD.onReady(function () {
-    var fonts = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
-    var loaded = document.readyState === "complete" ? Promise.resolve() : new Promise(function (r) { window.addEventListener("load", r); });
-    Promise.all([fonts, loaded]).then(start, start);
-    setTimeout(start, 2500); // never get stuck on a slow font load
+  var CHECK = '<svg viewBox="0 0 60 60"><path d="M17 31l9 9 17-19" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  var cardEls = DRESSES.map(function (d) {
+    var c = mk("div", "card");
+    c.setAttribute("data-d", d);
+    c.innerHTML = '<i class="pic"></i><span class="lbl"></span><b class="check">' + CHECK + "</b>";
+    c.querySelector(".lbl").textContent = T.dresses[d];
+    cards.appendChild(c);
+    return c;
   });
+
+  // ---------------------------------------------------------------- scenes
+  var dress = null, cardsReady = false;
+
+  // 1. Ruby says hi; the CTA pulses
+  function intro() {
+    state = "intro";
+    chatAt(CHAT_Y.intro, true);
+    Player.play("intro", { loop: true, fade: 0.6, loopFade: 0.5 });
+    Player.preload("choose");
+    show($("logo"), 700, 100, "translateY(-20px)");
+    show(pill, 600, 350, "translateX(-50%) translateY(-16px) scale(0.9)", "translateX(-50%)");
+    later(700, function () { say(T.hello, 650); });
+    later(1500, function () { show(cta, 600, 0, "translateY(40px) scale(0.9)"); });
+  }
+
+  // 2. Which dress? The button is there from the start, disabled until a dress is picked.
+  function choose() {
+    state = "choose";
+    // The two idle clips match frame to frame except while she plays with her hair (about 1-4.5 s
+    // into the intro). Early on: cross-fade now into the matching frame. Otherwise: let the intro
+    // reach its loop point and join there, invisibly; the new UI is already on screen anyway.
+    var iv = Player.cur, t = iv ? iv.currentTime : 0;
+    var opts = { loop: true, fade: 0.5, loopFade: 0.45 };
+    if (t < 0.9) { opts.at = t * 0.45; Player.play("choose", opts); }
+    else Player.atLoop("choose", opts);
+    hide(cta, 300, "scale(0.92)");
+    anim(pill, [{ opacity: 1, transform: "translateX(-50%)" }, { opacity: 0, transform: "translateX(-50%) translateY(-20px)" }], 300);
+    clearChat(300);
+    later(260, function () { chatAt(CHAT_Y.choose, true); showTitle(T.chooseTitle); });
+    later(520, function () { say(T.chooseAsk, 850); });
+    later(1500, function () {
+      cardEls.forEach(function (c, i) {
+        anim(c, [
+          { opacity: 0, transform: "translateY(100px) scale(0.9)" },
+          { opacity: 1, transform: "none" },
+        ], 700, SPRING, i * 110).finished.then(function () {
+          // the select / dim classes drive it from here on
+          c.style.transform = ""; c.style.opacity = ""; c.classList.add("in");
+        });
+      });
+      show(wearBtn, 650, 380, "translateY(40px)");
+      cardsReady = true;
+      Sound.sparkle();
+    });
+  }
+  function pickDress(i) {
+    if (dress === DRESSES[i]) return;
+    var first = !dress;
+    dress = DRESSES[i];
+    cardEls.forEach(function (c, k) {
+      c.classList.toggle("sel", k === i);
+      c.classList.toggle("dim", k !== i);
+    });
+    var c = cardEls[i], r = c.getBoundingClientRect();
+    sparks((r.left + r.width / 2 - view.ox) / view.s, (r.top + r.height * 0.45 - view.oy) / view.s, 12, 170, 1);
+    Sound.sparkle();
+    Player.preload("wear_" + dress);
+    if (first) wearBtn.classList.remove("off");
+    var core = wearBtn.querySelector(".core");
+    anim(core, [{ transform: "scale(1)" }, { transform: "scale(1.05)" }, { transform: "scale(1)" }], 380, "ease-out")
+      .finished.then(function () { core.style.transform = ""; });
+  }
+
+  // 3. She wears it, admires it, turns around
+  function wear() {
+    state = "wear";
+    var S = SEAM[dress];
+    Sound.whoosh();
+    // all three cards leave together, the button and the text with them
+    cardEls.forEach(function (c, k) {
+      var cs = getComputedStyle(c);
+      anim(c, [
+        { opacity: cs.opacity, transform: cs.transform === "none" ? "none" : cs.transform },
+        { opacity: 0, transform: "translateY(60px) scale(0.94)" },
+      ], 480, "cubic-bezier(0.4, 0, 0.7, 1)", k * 50);
+    });
+    setTimeout(function () { cards.style.display = "none"; }, 700);
+    hide(wearBtn, 420, "translateY(50px)");
+    hideTitle();
+    clearChat(380);
+    // A soft dissolve: the picture goes hazy and bright, the new dress fades in under the haze
+    // right at its peak, then it clears up.
+    anim(videos, [
+      { transform: "scale(1)", filter: "blur(0px) brightness(1)" },
+      { transform: "scale(1.045)", filter: "blur(18px) brightness(1.28)", offset: 0.4 },
+      { transform: "scale(1)", filter: "blur(0px) brightness(1)" },
+    ], 1500, "ease-in-out").finished.then(function () { videos.style.transform = ""; videos.style.filter = ""; });
+    anim(flash, [{ opacity: 0 }, { opacity: 0.58, offset: 0.4 }, { opacity: 0 }], 1500, "ease-in-out");
+    later(420, function () {
+      Player.play("wear_" + dress, { fade: 0.36, endAt: S.wearOut - 0.25, onEnd: turn });
+      Player.preload("turn_" + dress);
+    });
+    later(560, function () { sparks(540, 860, 24, 440, 1.3); });
+    later(900, function () { chatAt(CHAT_Y.wear, true); });
+    later(1100, function () { say(T.amazing, 450); });
+    later(2600, function () { say(T.zipper, 550); });
+  }
+  function turn() {
+    state = "turn";
+    var S = SEAM[dress];
+    // she turns around; at the end of the turn the unzip clip takes over (see swipeScene)
+    Player.play("turn_" + dress, { at: Math.max(0, S.turnIn - 0.25), fade: 0.5, endAt: S.toUnzip - 0.3, onEnd: swipeScene });
+    Player.preload("unzip_" + dress);
+  }
+
+  // 4. Swipe the zipper down. The finger only sets a target; what is shown (the video frame and the
+  // pull) eases towards it every frame at a capped speed, so a flick plays out smoothly instead of
+  // skipping, and a slow drag follows the finger right away.
+  var Z = null, prog = 0, target = 0, drag = null, guideOn = false, travel = 0, zipRaf = 0, lastT = 0;
+  var TRAVEL = 1.3; // finger travel for the whole zipper, in zipper lengths
+  var MAX_SPEED = 1.6; // zipper lengths per second, at most
+  var unzipShown = false;
+  function swipeScene() {
+    state = "swipe";
+    Z = ZIP[dress];
+    // She has turned: the unzip clip fades in on its first frame (it matches the end of the turn)
+    // and waits there, perfectly still, for the finger.
+    Player.still("unzip_" + dress, 0.6);
+    unzipShown = true;
+    later(900, function () { Player.preload("chat_" + dress); });
+    clearChat(420);
+    later(300, function () { showTitle(T.swipeTitle); });
+    zip.style.left = Z.x + "px"; zip.style.top = Z.y0 + "px";
+    zip.style.setProperty("--len", (Z.y1 - Z.y0) + "px");
+    handle.style.left = Z.x + "px"; handle.style.top = Z.y0 + "px";
+    later(700, guideShow);
+  }
+  var handAnim = null;
+  function guideShow() {
+    if (state !== "swipe" || drag || guideOn || prog > 0.01) return;
+    guideOn = true;
+    anim(zip, [{ opacity: 0 }, { opacity: 1 }], 400);
+    var pull = zip.querySelector(".pull");
+    anim(pull, [{ transform: "scale(0.2)" }, { transform: "scale(1)" }], 500, SPRING).finished.then(function () { pull.style.transform = ""; });
+    // the hand presses at the pull and draws the line down, again and again
+    var x = Z.x - 55, y0 = Z.y0 - 5, y1 = Z.y1 - 40;
+    hand.style.left = x + "px"; hand.style.top = y0 + "px";
+    if (handAnim) handAnim.cancel();
+    handAnim = hand.animate ? hand.animate([
+      { opacity: 0, transform: "translate(40px, 40px) scale(1.1)" },
+      { opacity: 1, transform: "translate(0, 0) scale(1.1)", offset: 0.15 },
+      { opacity: 1, transform: "translate(0, 0) scale(0.95)", offset: 0.25 },
+      { opacity: 1, transform: "translate(0, " + (y1 - y0) + "px) scale(0.95)", offset: 0.7 },
+      { opacity: 0, transform: "translate(0, " + (y1 - y0 + 20) + "px) scale(1.05)", offset: 0.85 },
+      { opacity: 0, transform: "translate(40px, 40px) scale(1.1)" },
+    ], { duration: 2100, iterations: Infinity, easing: "ease-in-out", delay: 300, fill: "backwards" }) : null;
+  }
+  function guideHide() {
+    if (!guideOn) return;
+    guideOn = false;
+    anim(zip, [{ opacity: 1 }, { opacity: 0 }], 200);
+    if (handAnim) { handAnim.cancel(); handAnim = null; }
+    hand.style.opacity = 0;
+  }
+  function dragStart(p) {
+    guideHide();
+    if (!unzipShown) { unzipShown = true; Player.still("unzip_" + dress, 0.35); }
+    drag = { y: p.y, t0: target };
+    anim(handle, [{ opacity: 0, transform: "scale(0.4)" }, { opacity: 1, transform: "scale(1)" }], 250, SPRING);
+    runZip();
+  }
+  function dragMove(p) {
+    if (!drag) return;
+    target = Math.max(0, Math.min(1, drag.t0 + (p.y - drag.y) / ((Z.y1 - Z.y0) * TRAVEL)));
+    runZip();
+  }
+  function dragEnd() {
+    if (!drag) return;
+    drag = null;
+    if (state !== "swipe") return;
+    target = Math.max(prog, target) >= 0.4 ? 1 : 0; // far enough: it finishes by itself
+    runZip();
+  }
+  function runZip() {
+    if (zipRaf || state !== "swipe") return;
+    lastT = performance.now();
+    zipRaf = requestAnimationFrame(stepZip);
+  }
+  function stepZip(now) {
+    zipRaf = 0;
+    if (state !== "swipe") return;
+    var dt = Math.max(0.001, Math.min(0.05, (now - lastT) / 1000));
+    lastT = now;
+    var d = target - prog;
+    var step = d * (1 - Math.exp(-dt * 11)), max = MAX_SPEED * dt;
+    if (Math.abs(step) > max) step = d > 0 ? max : -max;
+    if (Math.abs(d) < 0.003) step = d;
+    var L = Z.y1 - Z.y0;
+    travel += Math.abs(step) * L;
+    while (travel > 12) { travel -= 12; Sound.zip(Math.min(1, Math.abs(step) / dt / MAX_SPEED)); }
+    prog += step;
+    handle.style.top = (Z.y0 + L * prog) + "px";
+    Player.seek(UNZIP_T * prog);
+    if (prog >= 0.999) { unzipped(); return; }
+    if (!drag && target === 0 && prog <= 0.001) { // sprang back: show the hint again
+      anim(handle, [{ opacity: 1 }, { opacity: 0 }], 200);
+      later(450, guideShow);
+      return;
+    }
+    if (Math.abs(target - prog) > 0.0005 || drag) zipRaf = requestAnimationFrame(stepZip);
+  }
+  function unzipped() {
+    state = "unzipped";
+    Sound.done();
+    sparks(Z.x, Z.y1, 16, 190, 1);
+    hideTitle();
+    anim(handle, [{ opacity: 1, transform: "scale(1)" }, { opacity: 0, transform: "scale(2.2)" }], 450);
+    Player.release(); // her reaction: the clip plays on for a moment
+    setTimeout(chatScene, 650);
+  }
+
+  // 5. Dark-mode chat with Ruby
+  function chatScene() {
+    state = "chat";
+    guideHide();
+    zip.style.opacity = 0; hand.style.opacity = 0; handle.style.opacity = 0;
+    anim(cut, [{ opacity: 0 }, { opacity: 1 }], 260, "ease-in").finished.then(function () {
+      Player.play("chat_" + dress, { loop: true, fade: 0, loopFade: 0.5 });
+      stage.classList.add("dark");
+      title.innerHTML = "";
+      chatAt(CHAT_Y.chat, true);
+      pill.classList.add("online");
+      $("pillRole").textContent = T.online;
+      setTimeout(function () {
+        anim(cut, [{ opacity: 1 }, { opacity: 0 }], 480, "ease-out");
+        anim(pill, [{ opacity: 0, transform: "translateX(-50%) translateY(-16px)" }, { opacity: 1, transform: "translateX(-50%)" }], 450, EASE_OUT, 150);
+        say(T.final, 800, function () {
+          cta.querySelector(".t").textContent = T.cta;
+          show(cta, 600, 300, "translateY(50px) scale(0.9)");
+          AD.gameEnd();
+        });
+      }, 160);
+    });
+  }
+
+  // ---------------------------------------------------------------- input
+  stage.addEventListener("pointerdown", function (e) {
+    Sound.init();
+    Player.kick();
+    var p = toStage(e);
+    if (state === "intro") { tapRing(p); Sound.tap(); choose(); return; }
+    if (state === "choose") {
+      var card = e.target.closest && e.target.closest(".card");
+      if (card && cardsReady) { pickDress(cardEls.indexOf(card)); return; }
+      // the "Try it on" button, with a forgiving margin; does nothing while disabled
+      if (dress && p.y > 1515 && p.y < 1710) { tapRing(p); Sound.tap(); wear(); }
+      return;
+    }
+    if (state === "swipe") { try { stage.setPointerCapture(e.pointerId); } catch (x) {} dragStart(p); return; }
+    if (state === "chat") { tapRing(p); AD.click(CFG.clickUrl); }
+  });
+  stage.addEventListener("pointermove", function (e) { if (drag) dragMove(toStage(e)); });
+  stage.addEventListener("pointerup", dragEnd);
+  stage.addEventListener("pointercancel", dragEnd);
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) { Player.pause(); Sound.suspend(); } else { Player.resume(); Sound.resume(); }
+  });
+
+  // ---------------------------------------------------------------- go
+  function start() {
+    AD.gameReady();
+    // QA shortcuts: ?d=red|black|burgundy jumps to the swipe, &end=1 to the final chat
+    if (Q.d && ZIP[Q.d]) {
+      dress = Q.d;
+      chatAt(CHAT_Y.wear, true);
+      $("logo").style.opacity = 1;
+      if (Q.end) { state = "swipe"; Z = ZIP[dress]; chatScene(); } else swipeScene();
+      return;
+    }
+    intro();
+  }
+  function ready() {
+    var go = function () { AD.onReady(start); };
+    if (document.fonts && document.fonts.load) {
+      Promise.all(["400", "500", "600"].map(function (w) { return document.fonts.load(w + " 40px 'General Sans'"); }))
+        .then(go, go);
+      setTimeout(go, 1500); // never wait long for fonts
+    } else go();
+  }
+  var started = false;
+  var _start = start;
+  start = function () { if (started) return; started = true; _start(); };
+  ready();
 })();

@@ -1,18 +1,29 @@
-// Values that change per campaign. The build script can override them:
-//   node tools/build.mjs --amount=125 --unit="giros gratis" --url=https://example.com/landing
+// Values that change per campaign. The build script can override the click URL:
+//   node tools/build.mjs --url=https://example.com/landing
 window.PLAYABLE_CONFIG = {
-  bonusAmount: 125, // the prize in the pop-up
-  bonusUnit: "giros gratis", // "TU BONO: 125 GIROS GRATIS"
   clickUrl: "https://example.com/", // placeholder landing / store URL
-  locale: "es-MX", // number format of the amount
+  sound: true, // UI sounds (WebAudio), only after the first tap
 
-  // On-screen copy. The legal footer lives in index.html.
+  // On-screen copy
   text: {
-    title: "¡Rompe<br><small>la piñata!</small>",
-    choose: "¡Elige tu arma!", // above the weapon panel
-    // under the pinata: before the 1st strike, then after strikes 1, 2 and 3
-    hits: ["¡Toca para smash!", "¡Dale otra vez!", "¡Más fuerte!", "¡Un golpe más!"],
-    bonus: "Tu bono:", // "TU BONO: / 125 GIROS GRATIS" in the pop-up
-    cta: "Reclamar bono",
+    name: "Ruby",
+    role: "AI character",
+    online: "Online now",
+    hello: "Hi! I’m Ruby!",
+    start: "Tap to start",
+    chooseTitle: "Tap dress to choose",
+    chooseAsk: "Will you help me choose a new look? Which dress should I wear?",
+    wear: "Try it on",
+    dresses: { black: "Black dress", burgundy: "Burgundy dress", red: "Red dress" },
+    amazing: "It looks amazing on me…",
+    zipper: "…but the zipper’s stuck in the back. Care to help? 😉",
+    swipeTitle: "Swipe down to unzip",
+    final: "It’s getting crowded out here… Come join me in private, I’m waiting 💋",
+    cta: "Reply to Ruby",
+    legal:
+      "Producciones Móviles S.A. de C.V., licensed for games and prize draws under permit " +
+      "DGAJS/SCEVF/P-06/2005-TER and authorization letter SG/SSCPPSAR/DGJS/0192/2026 for the promotion: " +
+      "Welcome Package. Authorization valid until December 31, 2026. Personal and non-transferable promotion. " +
+      "Play responsibly. The main purpose is entertainment, fun and leisure. 18+.",
   },
 };
