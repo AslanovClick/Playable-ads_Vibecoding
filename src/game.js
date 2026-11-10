@@ -206,6 +206,7 @@
       els.forEach(function (x) { if (x !== v && x._o && x !== cur && !x._busy) x._o = null; }); // superseded
       load(v, name);
       v._o = o; v._fired = false;
+      v.playbackRate = 1;
       try { v.currentTime = o.at || 0; } catch (e) {}
       var p = v.play();
       if (p && p.catch) p.catch(function () { blocked = true; });
@@ -277,7 +278,13 @@
       // switch to this clip where the current loop would jump back (a seamless join), not right now
       atLoop: function (name, o) { if (!cur || cur.paused) play(name, o); else queued = { name: name, o: o }; },
       // lets the scrubbed clip play on by itself from where the finger left it
-      release: function () { if (scrub) { want = null; var p = scrub.play(); if (p && p.catch) p.catch(function () {}); } },
+      release: function () {
+        if (!scrub) return null;
+        want = null;
+        var p = scrub.play();
+        if (p && p.catch) p.catch(function () {});
+        return scrub;
+      },
       // autoplay was refused (low-power mode etc): retry inside the first tap
       kick: function () { if (blocked && cur) { blocked = false; var p = cur.play(); if (p && p.catch) p.catch(function () {}); } },
       pause: function () { hidden = els.filter(function (v) { return !v.paused; }); hidden.forEach(function (v) { v.pause(); }); },
@@ -507,6 +514,7 @@
   var Z = null, prog = 0, target = 0, drag = null, guideOn = false, travel = 0, zipRaf = 0, lastT = 0;
   var TRAVEL = 1.3; // finger travel for the whole zipper, in zipper lengths
   var MAX_SPEED = 1.6; // zipper lengths per second, at most
+  var HOLD_MS = 1500; // after the zipper stops: her slow-motion moment before the chat
   var unzipShown = false;
   function swipeScene() {
     state = "swipe";
@@ -603,8 +611,15 @@
     sparks(Z.x, Z.y1, 16, 190, 1);
     hideTitle();
     anim(handle, [{ opacity: 1, transform: "scale(1)" }, { opacity: 0, transform: "scale(2.2)" }], 450);
-    Player.release(); // her reaction: the clip plays on for a moment
-    setTimeout(chatScene, 650);
+    // She stays with her back to us a little longer: the clip plays on and eases into slow motion
+    // (1x -> 0.55x over half a second), 1.5 s in all, before the chat.
+    var v = Player.release();
+    if (v) {
+      [[0, 0.85], [200, 0.7], [450, 0.55]].forEach(function (r) {
+        setTimeout(function () { try { v.playbackRate = r[1]; } catch (e) {} }, r[0]);
+      });
+    }
+    setTimeout(chatScene, HOLD_MS);
   }
 
   // 5. Dark-mode chat with Ruby
