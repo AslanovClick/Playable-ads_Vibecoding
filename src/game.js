@@ -36,16 +36,7 @@
   var Q = (function () { var q = {}; location.search.replace(/[?&]([^=&]+)=?([^&]*)/g, function (_, k, v) { q[k] = v; }); return q; })();
 
   // ---------------------------------------------------------------- layout
-  var view = { s: 1, ox: 0, oy: 0 };
-  function fit() {
-    var vw = window.innerWidth, vh = window.innerHeight;
-    var s = Math.min(vw / W, vh / H);
-    view = { s: s, ox: (vw - W * s) / 2, oy: (vh - H * s) / 2 };
-    stage.style.transform = "translate(" + view.ox + "px," + view.oy + "px) scale(" + s + ")";
-  }
-  window.addEventListener("resize", fit);
-  window.addEventListener("orientationchange", function () { setTimeout(fit, 120); });
-  fit();
+  var view = window.VIEW; // scale and offset of the stage, kept up to date by fit.js
   function toStage(e) { return { x: (e.clientX - view.ox) / view.s, y: (e.clientY - view.oy) / view.s }; }
 
   // ---------------------------------------------------------------- helpers

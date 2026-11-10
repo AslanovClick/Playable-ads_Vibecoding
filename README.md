@@ -47,5 +47,5 @@ npm run dev            # http://localhost:8765/src/index.html (и /dist/index.ht
 
 ## Структура
 
-- `src/` — игра; `src/clips.js` — список роликов, `src/ad.js` — адаптер сетей: MRAID (AppLovin, Unity, Vungle…), ironSource `dapi`, Mintegral, Google `ExitApi`, Meta `FbPlayableAd`, иначе `window.open`
+- `src/` — игра; `src/fit.js` вписывает сцену в экран ещё до разбора тяжёлых встроенных видео (до этого сцена скрыта, поэтому при загрузке не мелькает неотмасштабированный кадр); `src/clips.js` — список роликов, `src/ad.js` — адаптер сетей: MRAID (AppLovin, Unity, Vungle…), ironSource `dapi`, Mintegral, Google `ExitApi`, Meta `FbPlayableAd`, иначе `window.open`
 - `dist/index.html` — готовый файл для загрузки в сеть
