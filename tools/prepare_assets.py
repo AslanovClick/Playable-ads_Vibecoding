@@ -1,32 +1,43 @@
-"""Prepares everything the playable embeds: re-encoded video clips and the UI images.
+"""Prepares everything the playable embeds, from the animator's delivery.
 
-    python tools/prepare_assets.py                 # 720 px wide, CRF 29 (~6.7 MB of video)
-    python tools/prepare_assets.py --width 540 --crf 31   # fits a 5 MB network limit, softer
-    python tools/prepare_assets.py --only images   # skip the (slow) video encode
+    python tools/prepare_assets.py                 # clips + images
+    python tools/prepare_assets.py --only video --width 720 --crf 28
+    python tools/prepare_assets.py --only images
 
-Sources:
-  src/animations/*.mp4  the clips from the animator, "1-<scene> - Choose My Look - <dress>"
-                        scene: 1 intro, 2 wears the dress, 3 turns around, 4 back loop (not used),
-                               5 unzip, 6 final loop for the chat
-                        dress: 1 red, 2 black, 3 burgundy (scene 1 has two clips: 1 intro, 2 choose)
-  figma-src/            dress pictures, Ruby's portrait and the logo exported from Figma
+Videos: the clips in src/EVA AI Playable Ads #3/ (or a file named after the slot in
+src/animations/, which wins) are re-encoded to src/video/<slot>.mp4 (720 px, H.264; the voiced
+ones keep their audio as mono AAC). DELIVERY below says which file fills which slot.
 
-Needs ffmpeg: either on PATH or the one from `pip install imageio-ffmpeg`.
+Images: the first frame of the hook clip becomes src/assets/poster.webp (shown under the videos
+until the first frame is decoded), and her face from the close-up idle becomes the round chat
+avatar maya_ava.webp.
+
+Needs ffmpeg: on PATH or from `pip install imageio-ffmpeg`.
 """
-import argparse, re, shutil, subprocess
+import argparse, shutil, subprocess
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
 ANIM = ROOT / "src" / "animations"
-FIG = ROOT / "figma-src"
-OUT_V = ROOT / "src" / "video"
 OUT_A = ROOT / "src" / "assets"
+OUT_V = ROOT / "src" / "video"
 
-DRESSES = {"1": "red", "2": "black", "3": "burgundy"}
-# the swipe scrubs the first ~1.7 s, then it plays on at normal speed for 1.5 s, then the fade to the chat
-UNZIP_SECONDS = 4.2  # with a margin, so the last frame never freezes before the cut
-SCENES = {"2": "wear", "3": "turn", "5": "unzip", "6": "chat"}  # 4 (idle with her back turned) is not used
+DELIVERED = ROOT / "src" / "EVA AI Playable Ads #3"
+# slot: (file in the delivery, without " CRF 30.mp4"; keep its audio)
+DELIVERY = {
+    "hook": ("Step_1_hair tuck_sound", True),          # S1: hair behind the ear, "Can I be your little secret…"
+    "idle1": ("Step_1_idle loop_no sound", False),     # S1: waits for the first reply
+    "behave": ("Step_2-1_eyebrow raise_no sound", False),
+    "maybe": ("Step_2-2_laugh lean_sound", True),      # a quiet laugh, leans in
+    "tension": ("Step_2-3_good girl line_sound", True),  # pushes in: "Now tell me… should I be a good girl…"
+    "idle2": ("Step_2-4_idle loop_no sound", False),   # chest and face, waits for the second reply
+    "bad": ("Step_3-1_bad side look_no sound", False),
+    "tease": ("Step_3-2_collarbone tease_no sound", False),
+    "final": ("Step_4-1_midnight line_sound", True),   # chin on hand: "It's past midnight…"
+    "cta": ("Step_4-2_idle loop_sound", False),        # the take that follows the voiced midnight line (it has no audio)
+}
+SLOTS = list(DELIVERY)
 
 
 def ffmpeg():
@@ -37,89 +48,69 @@ def ffmpeg():
     return imageio_ffmpeg.get_ffmpeg_exe()
 
 
-def clips():
-    """(source file, output name) for every clip."""
-    for f in sorted(ANIM.glob("*.mp4")):
-        m = re.match(r"1-(\d) - Choose My Look - (\d)", f.name)
-        if not m:
-            continue
-        scene, n = m.groups()
-        if scene == "4":
-            continue
-        if scene == "1":
-            yield f, "intro" if n == "1" else "choose"
-        else:
-            yield f, f"{SCENES[scene]}_{DRESSES[n]}"
+def frame(src, t):
+    raw = subprocess.run([ffmpeg(), "-v", "error", "-ss", str(t), "-i", str(src), "-frames:v", "1",
+                          "-f", "image2pipe", "-c:v", "png", "-"], capture_output=True, check=True).stdout
+    import io
+    return Image.open(io.BytesIO(raw)).convert("RGB")
 
 
-def encode_videos(width, crf, only=None):
-    OUT_V.mkdir(parents=True, exist_ok=True)
-    ff = ffmpeg()
-    total = 0
-    for src, name in clips():
-        if only and not name.startswith(only):
-            continue
-        out = OUT_V / f"{name}.mp4"
-        args = [ff, "-v", "error", "-y", "-i", str(src), "-an",
-                "-vf", f"scale={width}:-2:flags=lanczos,setsar=1",
-                "-c:v", "libx264", "-preset", "slow", "-tune", "film", "-crf", str(crf),
-                "-profile:v", "high", "-level", "4.0", "-pix_fmt", "yuv420p",
-                "-movflags", "+faststart"]
-        if name.startswith("unzip"):
-            # scrubbed by the finger: a keyframe every 6 frames keeps seeking cheap
-            args += ["-t", str(UNZIP_SECONDS), "-g", "6", "-keyint_min", "1", "-bf", "0"]
-        subprocess.run(args + [str(out)], check=True)
-        size = out.stat().st_size
-        total += size
-        print(f"  {name:16s} {size / 1024:7.0f} KB")
-    print(f"video total {total / 1024:.0f} KB")
-
-    # first frame of the intro: shown until the video starts (and if autoplay is blocked)
-    subprocess.run([ff, "-v", "error", "-y", "-i", str(OUT_V / "intro.mp4"), "-frames:v", "1",
-                    str(OUT_A / "_poster.png")], check=True)
-    Image.open(OUT_A / "_poster.png").save(OUT_A / "poster.webp", quality=70, method=6)
-    (OUT_A / "_poster.png").unlink()
+def clip_src(slot):
+    own = ANIM / f"{slot}.mp4"
+    return own if own.exists() else DELIVERED / f"{DELIVERY[slot][0]} CRF 30.mp4"
 
 
 def prepare_images():
     OUT_A.mkdir(parents=True, exist_ok=True)
-
-    # dresses: trimmed to their pixels, fitted into the card picture box (2x of 270x340)
-    for name in ("black", "burgundy", "red"):
-        im = Image.open(FIG / f"dress_{name}.png").convert("RGBA")
-        im = im.crop(im.getbbox())
-        im.thumbnail((540, 680), Image.LANCZOS)
-        im.save(OUT_A / f"dress_{name}.webp", quality=82, method=6)
-        print("  dress", name, im.size)
-
-    # Ruby's avatar: the face circle of the Figma mask (59 px circle on a 111x196 picture at 31,17)
-    src = Image.open(FIG / "ruby.png").convert("RGB")
-    k = src.width / 111
-    box = [round(31 * k), round(17 * k), round(90 * k), round(76 * k)]
-    face = src.crop(box).resize((180, 180), Image.LANCZOS)
+    # poster: the very first frame of the hook, so the stage never shows empty while the video starts
+    im = frame(clip_src("hook"), 0)
+    im = im.resize((720, round(im.height * 720 / im.width)), Image.LANCZOS)
+    im.save(OUT_A / "poster.webp", quality=80, method=6)
+    print("  poster.webp", im.size, (OUT_A / "poster.webp").stat().st_size // 1024, "KB")
+    # chat avatar: her face from the first frame of the close-up idle (1090 x 1920 source), round
+    im = frame(clip_src("idle2"), 0)
+    k = im.width / 1090  # face box measured on the 1090 px wide source: centre (548, 600), 760 px
+    box = [round((548 - 380) * k), round((600 - 380) * k), round((548 + 380) * k), round((600 + 380) * k)]
+    face = im.crop(box).resize((180, 180), Image.LANCZOS).convert("RGBA")
     mask = Image.new("L", (720, 720), 0)
     ImageDraw.Draw(mask).ellipse([0, 0, 719, 719], fill=255)
-    mask = mask.resize((180, 180), Image.LANCZOS)
-    face.putalpha(mask)
-    face.save(OUT_A / "ruby.webp", quality=85, method=6)
+    face.putalpha(mask.resize((180, 180), Image.LANCZOS))
+    face.save(OUT_A / "maya_ava.webp", quality=85, method=6)
+    print("  maya_ava.webp", (OUT_A / "maya_ava.webp").stat().st_size // 1024, "KB")
 
-    # logo: keep only the "EVA AI" wordmark and the eye, white, without the Figma canvas around it
-    svg = (FIG / "logo.svg").read_text(encoding="utf-8")
-    comp = svg[svg.index('<g id="Component 1">'):]
-    paths = re.findall(r'<path[^>]*?\sd="([^"]+)"', comp)
-    body = "".join(f'<path fill="#fff" fill-rule="evenodd" d="{d}"/>' for d in paths)
-    (OUT_A / "logo.svg").write_text(
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 426 100">{body}</svg>', encoding="utf-8")
-    print("  logo paths", len(paths))
+
+def encode_videos(width, crf):
+    """Each slot's clip from the animator's delivery (src/EVA AI Playable Ads #3/), or a file named
+    after the slot in src/animations/. The "_sound" renders are separate takes (lip-synced, so the
+    picture differs from the silent take); they are the ones that carry her voice and chain together."""
+    OUT_V.mkdir(parents=True, exist_ok=True)
+    ff = ffmpeg()
+    total = 0
+    for slot in SLOTS:
+        audio = DELIVERY[slot][1]
+        src = clip_src(slot)
+        if not src.exists():
+            print(f"  {slot:8s} missing ({src.name})")
+            continue
+        out = OUT_V / f"{slot}.mp4"
+        a = ["-c:a", "aac", "-b:a", "64k", "-ac", "1"] if audio else ["-an"]
+        subprocess.run([ff, "-v", "error", "-y", "-i", str(src),
+                        "-vf", f"scale={width}:-2:flags=lanczos,setsar=1",
+                        "-c:v", "libx264", "-preset", "slow", "-tune", "film", "-crf", str(crf),
+                        "-profile:v", "high", "-level", "4.0", "-pix_fmt", "yuv420p", *a,
+                        "-movflags", "+faststart", str(out)], check=True)
+        total += out.stat().st_size
+        print(f"  {slot:8s} {out.stat().st_size / 1024:7.0f} KB  <- {src.name}")
+    print(f"  total {total / 1048576:.2f} MB")
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--width", type=int, default=720)
-    ap.add_argument("--crf", type=int, default=29)
-    ap.add_argument("--only", choices=["video", "images", "unzip"])  # unzip: just the zipper clips
+    ap.add_argument("--crf", type=int, default=28)
+    ap.add_argument("--only", choices=["video", "images"])
     a = ap.parse_args()
-    if a.only not in ("video", "unzip"):
+    if a.only != "video":
         prepare_images()
-    if a.only not in ("images",):
-        encode_videos(a.width, a.crf, "unzip" if a.only == "unzip" else None)
+    if a.only != "images":
+        encode_videos(a.width, a.crf)

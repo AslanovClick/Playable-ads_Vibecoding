@@ -1,22 +1,15 @@
-// Video clips (made by tools/prepare_assets.py). The build inlines them; at runtime game.js turns
-// each one into a blob: URL, which plays everywhere (iOS does not play data: URLs).
+// The clips, one per beat of the story (re-encoded from the animator's delivery by
+// `python tools/prepare_assets.py --only video`; DELIVERY there says which file is which).
+// The build inlines them; at runtime game.js turns each one into a blob: URL.
 window.PLAYABLE_CLIPS = {
-  intro: "video/intro.mp4", // 1-1 #1: Ruby says hi (loop)
-  choose: "video/choose.mp4", // 1-1 #2: waits for the dress (loop)
-
-  wear_red: "video/wear_red.mp4", // 1-2: in the new dress, looks herself over
-  wear_black: "video/wear_black.mp4",
-  wear_burgundy: "video/wear_burgundy.mp4",
-
-  turn_red: "video/turn_red.mp4", // 1-3: turns around, shows the zipper
-  turn_black: "video/turn_black.mp4",
-  turn_burgundy: "video/turn_burgundy.mp4",
-
-  unzip_red: "video/unzip_red.mp4", // 1-5: waits on its first frame after the turn, then the swipe scrubs the zipper down
-  unzip_black: "video/unzip_black.mp4",
-  unzip_burgundy: "video/unzip_burgundy.mp4",
-
-  chat_red: "video/chat_red.mp4", // 1-6: behind the final chat (loop)
-  chat_black: "video/chat_black.mp4",
-  chat_burgundy: "video/chat_burgundy.mp4",
+  hook: "video/hook.mp4", // S1: tucks her hair behind her ear, "Can I be your little secret…" (voice)
+  idle1: "video/idle1.mp4", // S1: holds eye contact while you choose (loop)
+  behave: "video/behave.mp4", // S2: raises an eyebrow, amused half-smirk ("Depends. Are you going to behave?")
+  maybe: "video/maybe.mp4", // S2: quiet breathy laugh, leans closer ("My phone is locked…") (voice)
+  tension: "video/tension.mp4", // S3: the camera eases in, "Now tell me… should I be a good girl tonight…" (voice)
+  idle2: "video/idle2.mp4", // S3: chest and face, waits for the second reply (loop)
+  bad: "video/bad.mp4", // S4: steady eye contact ("Show me your bad side.")
+  tease: "video/tease.mp4", // S4: fingertips on the collarbone, head tilt ("Tease me first…")
+  final: "video/final.mp4", // S5: chin on her hand, "It's past midnight…" (voice)
+  cta: "video/cta.mp4", // S5: soft magnetic smile (loop)
 };

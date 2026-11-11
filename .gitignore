@@ -8,3 +8,5 @@ archive/
 
 # raw clips from the animator (re-encoded into src/video by tools/prepare_assets.py)
 src/animations/
+# the animator's delivery (the clips used are re-encoded into src/video)
+src/EVA AI Playable Ads #3/
