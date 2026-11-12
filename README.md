@@ -34,10 +34,12 @@ node tools/build.mjs --url=https://landing.example
 ## Видео
 
 ```bash
-python tools/prepare_assets.py --only video     # 720 px, H.264 CRF 28, голос — моно AAC 64k
+python tools/prepare_assets.py --only video     # 720 px, H.264 CRF 33 (veryslow), голос — моно AAC 48k
 ```
 
 Берёт ролики из `src/EVA AI Playable Ads #3/` (какой файл в какой слот — `DELIVERY` в [tools/prepare_assets.py](tools/prepare_assets.py)) и кладёт в `src/video/<слот>.mp4`; слоты прописаны в [src/clips.js](src/clips.js). Файл `src/animations/<слот>.mp4`, если есть, важнее поставки. Версии «_sound» — отдельные дубли с движением губ, поэтому цепочка собрана из них (в т. ч. финальный луп `Step_4-2_idle loop_sound`, у него нет звуковой дорожки, но он продолжает голосовой «midnight»). Если ролики заменят, точки `LOOPS`, `WIN` и `JOIN` нужно подобрать заново.
+
+Размер: весь `dist/index.html` держим до 5 МБ (сейчас ~4,94 МБ; ролики встраиваются base64, это +33% к их весу). Чтобы влезть без видимой потери: лёгкое шумоподавление (`hqdn3d`) убирает собственный шум сжатия исходников, x264 `veryslow` с одним ключевым кадром на ролик, `aq-mode=3` (без бандинга на тёмно-фиолетовом градиенте фона), CRF 33. Если ролики добавятся, бюджет придётся пересчитать (`--crf` у скрипта).
 
 ## Ассеты
 

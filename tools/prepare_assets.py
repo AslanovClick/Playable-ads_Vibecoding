@@ -1,12 +1,12 @@
 """Prepares everything the playable embeds, from the animator's delivery.
 
     python tools/prepare_assets.py                 # clips + images
-    python tools/prepare_assets.py --only video --width 720 --crf 28
+    python tools/prepare_assets.py --only video --width 720 --crf 33
     python tools/prepare_assets.py --only images
 
 Videos: the clips in src/EVA AI Playable Ads #3/ (or a file named after the slot in
 src/animations/, which wins) are re-encoded to src/video/<slot>.mp4 (720 px, H.264; the voiced
-ones keep their audio as mono AAC). DELIVERY below says which file fills which slot.
+ones keep their audio as mono AAC, 48 kbit/s). DELIVERY below says which file fills which slot.
 
 Images: the first frame of the intro clip becomes src/assets/poster.webp (shown under the videos
 until the first frame is decoded), and her face from the close-up idle becomes the round chat
@@ -66,7 +66,7 @@ def prepare_images():
     # poster: the very first frame of the intro, so the stage never shows empty while the video starts
     im = frame(clip_src("intro"), 0)
     im = im.resize((720, round(im.height * 720 / im.width)), Image.LANCZOS)
-    im.save(OUT_A / "poster.webp", quality=80, method=6)
+    im.save(OUT_A / "poster.webp", quality=70, method=6)
     print("  poster.webp", im.size, (OUT_A / "poster.webp").stat().st_size // 1024, "KB")
     # chat avatar: her face from the first frame of the close-up idle (1090 x 1920 source), round
     im = frame(clip_src("idle2"), 0)
@@ -94,10 +94,13 @@ def encode_videos(width, crf):
             print(f"  {slot:8s} missing ({src.name})")
             continue
         out = OUT_V / f"{slot}.mp4"
-        a = ["-c:a", "aac", "-b:a", "64k", "-ac", "1"] if audio else ["-an"]
+        a = ["-c:a", "aac", "-b:a", "48k", "-ac", "1"] if audio else ["-an"]
         subprocess.run([ff, "-v", "error", "-y", "-i", str(src),
-                        "-vf", f"scale={width}:-2:flags=lanczos,setsar=1",
-                        "-c:v", "libx264", "-preset", "slow", "-tune", "film", "-crf", str(crf),
+                        # a light denoise takes out the source's own compression noise (it costs bits and
+                        # shows nothing); x264 at its most thorough, one keyframe per clip (they are short)
+                        "-vf", f"hqdn3d=1.2:1.2:3:3,scale={width}:-2:flags=lanczos,setsar=1",
+                        "-c:v", "libx264", "-preset", "veryslow", "-crf", str(crf),
+                        "-x264-params", "keyint=240:min-keyint=240:bframes=6:ref=6:aq-mode=3:aq-strength=0.9:deblock=-1,-1",
                         "-profile:v", "high", "-level", "4.0", "-pix_fmt", "yuv420p", *a,
                         "-movflags", "+faststart", str(out)], check=True)
         total += out.stat().st_size
@@ -108,7 +111,7 @@ def encode_videos(width, crf):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--width", type=int, default=720)
-    ap.add_argument("--crf", type=int, default=28)
+    ap.add_argument("--crf", type=int, default=33)  # the whole playable stays under 5 MB
     ap.add_argument("--only", choices=["video", "images"])
     a = ap.parse_args()
     if a.only != "video":
