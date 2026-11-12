@@ -35,6 +35,10 @@ html, body {
 :where(#stage i, #stage b) { display: block; font-style: normal; }
 
 /* ------------------------------------------------------------------ picture */
+/* The picture stops 2 px short of the stage's edges. The video layers are composited and clipped by
+   the stage a little differently from the shades over them: at a fractional screen scale the outermost
+   pixel column of the video stayed unshaded and showed as a light line along the sides. */
+#cam { left: 2px; top: 2px; width: calc(100% - 4px); height: calc(100% - 4px); z-index: 0; }
 #poster { background: var(--img-poster) center / cover no-repeat; }
 #videos { z-index: 0; } /* the layers' z-index stays inside: the shades, chat and buttons are always above */
 #videos video { object-fit: cover; opacity: 0; pointer-events: none; background: transparent; will-change: opacity, transform; }
@@ -253,7 +257,17 @@ html, body {
   48%, 100% { transform: scale(1); box-shadow: 0 12px 40px rgba(150, 50, 255, 0.5), inset 0 2px 0 rgba(255, 255, 255, 0.35), inset 0 -6px 16px rgba(70, 0, 160, 0.35); }
 }
 @keyframes shine { 0%, 45% { left: -40%; } 85%, 100% { left: 120%; } }
-#cta { --w: 1072px; left: 4px; top: 1540px; } /* core x 36-1044 like the options, its bottom on the content line */
+#cta, #go { --w: 1072px; left: 4px; top: 1540px; } /* core x 36-1044 like the options, its bottom on the content line */
+
+/* the start: a short line over the button, breathing gently */
+#title {
+  left: 36px; width: 1008px; bottom: 380px; /* 36 px above the button */
+  text-align: center; font-size: 58px; line-height: 1.15; font-weight: 500; letter-spacing: -0.3px;
+  text-shadow: 0 2px 10px rgba(10, 0, 40, 0.6), 0 0 26px rgba(196, 110, 255, 0.55);
+  opacity: 0; pointer-events: none;
+}
+#title span { display: inline-block; animation: breathe 2.8s ease-in-out infinite; }
+@keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
 
 /* ------------------------------------------------------------------ effects */
 #fx { pointer-events: none; overflow: hidden; }
@@ -274,4 +288,5 @@ html, body {
   font-size: 18px; line-height: 1.3; font-weight: 400; letter-spacing: 0.2px;
   color: rgba(236, 222, 240, 0.78);
   pointer-events: none;
+  visibility: hidden; /* hidden for now; its room is kept */
 }

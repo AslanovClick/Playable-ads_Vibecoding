@@ -6,6 +6,9 @@ window.PLAYABLE_CONFIG = {
 
   // On-screen copy
   text: {
+    // the start (a "shh" loop): the first tap starts the chat and lets her voice in
+    startTitle: "Maya has a little secret for you",
+    start: "Listen to Maya",
     hook: "Can I be your little secret… the one you only open late at night?",
     // the two replies of each choice: [first, second]
     replies1: ["Depends. Are you going to behave?", "My phone is locked. But for you… maybe."],

@@ -6,11 +6,14 @@
 
   // Loops: cross-fade from `out` back to `in` (seconds), where her pose matches best (measured
   // frame by frame on the clips).
-  var LOOPS = { idle1: [4.542, 0.667], idle2: [4.0, 0.208], cta: [5.0, 0.292] };
+  var LOOPS = { intro: [4.375, 0], idle1: [4.542, 0.667], idle2: [4.0, 0.208], cta: [5.0, 0.292] };
   // When a reply is picked during an idle loop, the reaction starts at the next moment the loop is
   // back in the pose the reaction clips start from (seconds); never later than WAIT ms.
-  var WIN = { idle1: [[0, 1.0], [3.75, 4.6]], idle2: [[0, 0.92], [3.5, 4.05]] };
-  var WAIT = 2000;
+  var WIN = { intro: [[0, 0.1], [4.1, 4.6]], idle1: [[0, 1.0], [3.75, 4.6]], idle2: [[0, 0.92], [3.5, 4.05]] };
+  var WAIT = 2000, WAIT_START = 1300; // after the start button the chat should not keep you waiting
+  // The wide scenes (start, hook, first reaction) are lifted so her head sits right under the logo;
+  // the camera comes down to the normal framing with the push-in of the "good girl" line.
+  var LIFT = 140;
   // Joins where the camera framing differs between the end of one clip and the start of the next:
   // the next clip starts zoomed / shifted [scale, x px, y px] so it lines up with the last frame of
   // the one before, cross-fades in, then eases back to its own framing (a slow camera move).
@@ -31,8 +34,8 @@
   var CHAT_Y = { low: LINE, cta: LINE - 158 - GAP };
 
   function $(id) { return document.getElementById(id); }
-  var stage = $("stage"), videos = $("videos"), chat = $("chat"), snd = $("snd");
-  var choices = $("choices"), cta = $("cta"), fx = $("fx");
+  var stage = $("stage"), cam = $("cam"), videos = $("videos"), chat = $("chat"), snd = $("snd");
+  var choices = $("choices"), cta = $("cta"), go = $("go"), fx = $("fx");
 
   var Q = (function () { var q = {}; location.search.replace(/[?&]([^=&]+)=?([^&]*)/g, function (_, k, v) { q[k] = v; }); return q; })();
 
@@ -185,7 +188,7 @@
       }
       // a haze over the whole picture at the middle of the fade, where two different poses overlap
       if (prev && prev !== v && (o.soft || (m && m[3] === "soft"))) {
-        anim(videos, [{ filter: "none" }, { filter: "blur(7px) brightness(1.06)", offset: 0.5 }, { filter: "none" }], fade * 1000 + 160, "ease-in-out");
+        anim(cam, [{ filter: "none" }, { filter: "blur(7px) brightness(1.06)", offset: 0.5 }, { filter: "none" }], fade * 1000 + 160, "ease-in-out");
       }
       clearInterval(v._vt);
       try { v.volume = 1; } catch (e) {}
@@ -271,7 +274,7 @@
       clip: function () { return cur ? cur._clip : null; },
       // run fn at the next point the current clip can hand over smoothly: the end of a one-shot
       // (instead of what it would play next), or a matching moment of a loop
-      next: function (fn) { pending = { fn: fn, until: Date.now() + WAIT }; },
+      next: function (fn, wait) { pending = { fn: fn, until: Date.now() + (wait || WAIT) }; },
       kick: function () { if (blocked && cur) { blocked = false; start(cur); } },
       // sound on / off; switched on from a tap (inTap), every layer is started once in that tap so
       // that mobile browsers let it play with sound later on
@@ -422,19 +425,41 @@
   // ---------------------------------------------------------------- static copy
   $("legal").textContent = T.legal;
   cta.querySelector(".t").textContent = T.cta;
+  go.querySelector(".t").textContent = T.start;
+  $("title").innerHTML = "<span></span>";
+  $("title").firstChild.textContent = T.startTitle;
 
   // ---------------------------------------------------------------- scenes
   function sec(t) { return Math.round(t * 1000); }
 
-  // S1. Hook: she tucks her hair behind her ear, "Can I be your little secret…", then waits for the
-  // reply (her message stays until one is picked)
-  function hook() {
-    state = "hook";
+  // S0. Start: "shh", a short line and "Listen to Maya". Any tap starts the chat; being a tap, it
+  // also lets the sound in, so her voice is there from the hook on.
+  function intro() {
+    state = "intro";
+    cam.style.transform = "translateY(" + -LIFT + "px)";
     show($("logo"), 700, 100, "translateY(-20px)");
     show(snd, 600, 250, "scale(0.6)");
+    Player.play("intro", { loop: true, fade: 0.2 });
+    Player.preload("hook");
+    later(450, function () { show($("title"), 700, 0, "translateY(24px)"); });
+    later(700, function () { show(go, 650, 0, "translateY(50px) scale(0.9)"); });
+  }
+  function begin(p) {
+    state = "begin";
+    tapRing(p);
+    [$("title"), go].forEach(function (el, k) {
+      anim(el, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(30px) scale(0.97)" }], 420, "cubic-bezier(0.4, 0, 0.7, 1)", 120 + k * 60);
+    });
+    Player.next(hook, WAIT_START); // as soon as the "shh" is back in the pose the hook starts from
+  }
+
+  // S1. Hook: she tucks her hair behind her ear, "Can I be your little secret…", then waits for the
+  // reply (her message stays until one is picked)
+  function hook(late) {
+    state = "hook";
     chatAt(setOptions(T.replies1), true);
-    Player.play("hook", {
-      fade: 0.2,
+    cut("hook", {
+      fade: late ? 0.7 : 0.45, soft: late,
       onStart: function () {
         later(sec(AT.hookMsg), function () { say(T.hook, 600); });
         later(sec(AT.hookOptions), function () { offerOptions(react1); });
@@ -466,6 +491,8 @@
     cut("tension", {
       fade: 0.45, settle: 2400,
       onStart: function () {
+        // the camera comes down from the lifted wide framing along with her push-in
+        if (getComputedStyle(cam).transform !== "none") anim(cam, [{ transform: "translateY(" + -LIFT + "px)" }, { transform: "none" }], 2400, "cubic-bezier(0.42, 0, 0.3, 1)");
         clearChat();
         later(sec(AT.tensionMsg), function () { chatAt(setOptions(T.replies2), true); say(T.tension, 500); });
         later(sec(AT.tensionOptions), function () { offerOptions(react2); });
@@ -534,6 +561,7 @@
     if (soundOn && silenced) setSound(true, true); // the first tap lets the sound in
     Player.kick();
     var p = toStage(e);
+    if (state === "intro") { if (soundOn) setSound(true, true); Sound.tap(); begin(p); return; }
     if (state === "end") { tapRing(p); AD.click(CFG.clickUrl); return; }
     var chip = e.target.closest && e.target.closest(".chip");
     if (chip && onPick && !choices.classList.contains("done")) { Sound.tap(); pickOption(+chip.getAttribute("data-i")); }
@@ -552,7 +580,8 @@
       if (Q.s === "end") finale(); else tension();
       return;
     }
-    hook();
+    if (Q.s === "hook") { $("logo").style.opacity = 1; snd.style.opacity = 1; cam.style.transform = "translateY(" + -LIFT + "px)"; hook(); return; }
+    intro();
   }
   function ready() {
     var go = function () { AD.onReady(start); };

@@ -8,7 +8,7 @@ Videos: the clips in src/EVA AI Playable Ads #3/ (or a file named after the slot
 src/animations/, which wins) are re-encoded to src/video/<slot>.mp4 (720 px, H.264; the voiced
 ones keep their audio as mono AAC). DELIVERY below says which file fills which slot.
 
-Images: the first frame of the hook clip becomes src/assets/poster.webp (shown under the videos
+Images: the first frame of the intro clip becomes src/assets/poster.webp (shown under the videos
 until the first frame is decoded), and her face from the close-up idle becomes the round chat
 avatar maya_ava.webp.
 
@@ -26,6 +26,7 @@ OUT_V = ROOT / "src" / "video"
 DELIVERED = ROOT / "src" / "EVA AI Playable Ads #3"
 # slot: (file in the delivery, without " CRF 30.mp4"; keep its audio)
 DELIVERY = {
+    "intro": ("Step_1_shh loop_no sound", False),       # start: "shh", finger on her lips (loop); the first tap lets the sound in
     "hook": ("Step_1_hair tuck_sound", True),          # S1: hair behind the ear, "Can I be your little secret…"
     "idle1": ("Step_1_idle loop_no sound", False),     # S1: waits for the first reply
     "behave": ("Step_2-1_eyebrow raise_no sound", False),
@@ -62,8 +63,8 @@ def clip_src(slot):
 
 def prepare_images():
     OUT_A.mkdir(parents=True, exist_ok=True)
-    # poster: the very first frame of the hook, so the stage never shows empty while the video starts
-    im = frame(clip_src("hook"), 0)
+    # poster: the very first frame of the intro, so the stage never shows empty while the video starts
+    im = frame(clip_src("intro"), 0)
     im = im.resize((720, round(im.height * 720 / im.width)), Image.LANCZOS)
     im.save(OUT_A / "poster.webp", quality=80, method=6)
     print("  poster.webp", im.size, (OUT_A / "poster.webp").stat().st_size // 1024, "KB")

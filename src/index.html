@@ -9,14 +9,17 @@
 </head>
 <body>
 <div id="stage">
-  <!-- the first frame, under the videos until the first one is on screen -->
-  <div id="poster" class="abs fill"></div>
-  <!-- video layers: game.js cross-fades between them -->
-  <div id="videos" class="abs fill">
-    <video class="abs fill" muted playsinline webkit-playsinline preload="auto" disableremoteplayback></video>
-    <video class="abs fill" muted playsinline webkit-playsinline preload="auto" disableremoteplayback></video>
-    <video class="abs fill" muted playsinline webkit-playsinline preload="auto" disableremoteplayback></video>
-    <video class="abs fill" muted playsinline webkit-playsinline preload="auto" disableremoteplayback></video>
+  <!-- the picture ("camera": lifted on the first, wide scenes) -->
+  <div id="cam" class="abs">
+    <!-- the first frame, under the videos until the first one is on screen -->
+    <div id="poster" class="abs fill"></div>
+    <!-- video layers: game.js cross-fades between them -->
+    <div id="videos" class="abs fill">
+      <video class="abs fill" muted playsinline webkit-playsinline preload="auto" disableremoteplayback></video>
+      <video class="abs fill" muted playsinline webkit-playsinline preload="auto" disableremoteplayback></video>
+      <video class="abs fill" muted playsinline webkit-playsinline preload="auto" disableremoteplayback></video>
+      <video class="abs fill" muted playsinline webkit-playsinline preload="auto" disableremoteplayback></video>
+    </div>
   </div>
   <div id="shadeTop" class="abs"></div>
   <div id="shadeBot" class="abs"></div>
@@ -29,6 +32,10 @@
   <div id="chat" class="abs"></div>
   <!-- the two replies to pick from -->
   <div id="choices" class="abs"></div>
+
+  <!-- the start: a short line and a button; the first tap also lets her voice in -->
+  <div id="title" class="abs"></div>
+  <div id="go" class="btn abs"><i class="r1"></i><i class="r2"></i><b class="core"><span class="shine"></span><span class="t"></span></b></div>
 
   <div id="cta" class="btn abs"><i class="r1"></i><i class="r2"></i><b class="core"><span class="shine"></span><span class="t"></span></b></div>
 

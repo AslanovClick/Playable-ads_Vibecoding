@@ -2,6 +2,7 @@
 // `python tools/prepare_assets.py --only video`; DELIVERY there says which file is which).
 // The build inlines them; at runtime game.js turns each one into a blob: URL.
 window.PLAYABLE_CLIPS = {
+  intro: "video/intro.mp4", // start: "shh", finger on her lips, a wink (loop) under "Listen to Maya"
   hook: "video/hook.mp4", // S1: tucks her hair behind her ear, "Can I be your little secret…" (voice)
   idle1: "video/idle1.mp4", // S1: holds eye contact while you choose (loop)
   behave: "video/behave.mp4", // S2: raises an eyebrow, amused half-smirk ("Depends. Are you going to behave?")
