@@ -4,12 +4,22 @@
 
 :root {
   --img-logo: url("assets/logo.svg");
-  --img-ava: url("assets/maya_ava.webp");
-  --img-poster: url("assets/poster.webp");
+  --img-card-real: url("assets/card_real.webp");
+  --img-card-anime: url("assets/card_anime.webp");
+  --th-real-jade: url("assets/th_real_jade.webp");
+  --th-real-mia: url("assets/th_real_mia.webp");
+  --th-real-scarlett: url("assets/th_real_scarlett.webp");
+  --th-real-yuna: url("assets/th_real_yuna.webp");
+  --th-anime-jade: url("assets/th_anime_jade.webp");
+  --th-anime-mia: url("assets/th_anime_mia.webp");
+  --th-anime-scarlett: url("assets/th_anime_scarlett.webp");
+  --th-anime-yuna: url("assets/th_anime_yuna.webp");
 
-  --bg: #170c44;
+  --bg: #150a3e;
   --grad: linear-gradient(90deg, #7f2ef6 0%, #d04aff 53.365%, #7f2ef6 100%);
-  --beat: 1.6s; /* CTA pulse */
+  --neon: #e7b8ff;
+  --beat: 1.6s; /* button pulse */
+  --spring: cubic-bezier(0.3, 1.5, 0.5, 1);
 }
 
 html, body {
@@ -34,24 +44,40 @@ html, body {
 .fill { left: 0; top: 0; width: 100%; height: 100%; }
 :where(#stage i, #stage b) { display: block; font-style: normal; }
 
-/* ------------------------------------------------------------------ picture */
-/* The picture stops 2 px short of the stage's edges. The video layers are composited and clipped by
-   the stage a little differently from the shades over them: at a fractional screen scale the outermost
-   pixel column of the video stayed unshaded and showed as a light line along the sides. */
-#cam { left: 2px; top: 2px; width: calc(100% - 4px); height: calc(100% - 4px); z-index: 0; }
-#poster { background: var(--img-poster) center / cover no-repeat; }
-#videos { z-index: 0; } /* the layers' z-index stays inside: the shades, chat and buttons are always above */
-#videos video { object-fit: cover; opacity: 0; pointer-events: none; background: transparent; will-change: opacity, transform; }
+/* ------------------------------------------------------------------ background */
+#glow {
+  background:
+    radial-gradient(44% 34% at 50% 52%, rgba(196, 76, 255, 0.34) 0%, rgba(196, 76, 255, 0) 100%),
+    radial-gradient(90% 60% at 50% 50%, rgba(92, 34, 178, 0.55) 0%, rgba(92, 34, 178, 0) 100%),
+    var(--bg);
+}
 
-/* the shades reach past the sides of the stage (which clips them): at a fractional screen scale
-   they would otherwise round to a pixel short of the edge and leave a bright line of the photo */
+/* ------------------------------------------------------------------ the girl (steps 2-3) */
+/* #hero is the source frame (1090 x 1920 px); each clip sits in it where its crop came from, and
+   game.js moves and scales the frame per scene (FRAME). Its edges fade into the background. */
+#hero {
+  left: 0; top: 0; width: 1090px; height: 1920px; transform-origin: 0 0; opacity: 0;
+  -webkit-mask: linear-gradient(180deg, transparent 0, #000 150px, #000 1540px, transparent 1650px);
+  mask: linear-gradient(180deg, transparent 0, #000 150px, #000 1540px, transparent 1650px);
+}
+#heroV { left: 0; top: 0; width: 1090px; height: 1920px; }
+video.lay { position: absolute; object-fit: fill; opacity: 0; pointer-events: none; background: transparent; will-change: opacity, transform; }
+
 #shadeTop {
-  left: -24px; top: -24px; width: calc(100% + 48px); height: 444px; pointer-events: none;
-  background: linear-gradient(180deg, rgba(23, 12, 68, 0.82) 0%, rgba(23, 12, 68, 0.45) 55%, rgba(23, 12, 68, 0) 100%);
+  left: -24px; top: -24px; width: calc(100% + 48px); height: 520px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(19, 8, 54, 0.9) 0%, rgba(19, 8, 54, 0.55) 50%, rgba(19, 8, 54, 0) 100%);
 }
 #shadeBot {
-  left: -24px; bottom: -24px; width: calc(100% + 48px); height: 924px; pointer-events: none;
-  background: linear-gradient(0deg, #170c44 0%, rgba(23, 12, 68, 0.88) 16%, rgba(23, 12, 68, 0.4) 50%, rgba(23, 12, 68, 0) 100%);
+  left: -24px; bottom: -24px; width: calc(100% + 48px); height: 660px; pointer-events: none;
+  background: linear-gradient(0deg, #150a3e 0%, rgba(21, 10, 62, 0.9) 22%, rgba(21, 10, 62, 0.45) 60%, rgba(21, 10, 62, 0) 100%);
+}
+/* the screen's side edges go to the page colour, so a letterbox strip on a wider screen never shows
+   a seam against the girl or the glow */
+#shadeSide { /* 24 px past each edge, so the stage edge itself (often a fractional pixel) is solid */
+  left: -24px; top: 0; width: calc(100% + 48px); height: 100%; pointer-events: none;
+  background:
+    linear-gradient(90deg, #150a3e 0, #150a3e 26px, rgba(21, 10, 62, 0.55) 50px, rgba(21, 10, 62, 0) 114px),
+    linear-gradient(270deg, #150a3e 0, #150a3e 26px, rgba(21, 10, 62, 0.55) 50px, rgba(21, 10, 62, 0) 114px);
 }
 
 /* ------------------------------------------------------------------ header */
@@ -61,154 +87,172 @@ html, body {
   filter: drop-shadow(0 0 18px rgba(214, 150, 255, 0.35));
 }
 
-/* sound toggle, top right, level with the logo; the tap area is larger than the glass circle */
-#snd {
-  right: 12px; top: 10px; width: 120px; height: 120px; z-index: 5;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; opacity: 0;
+/* ------------------------------------------------------------------ titles */
+/* The words come in one after another (rise, sharpen); while on screen the line breathes with a
+   soft glow. */
+/* Spacing follows the grouping: logo, then the title with its sub as one tight group (14 px), then
+   (step 2) the girl's name a little apart (36 px), as it belongs to her rather than to the text. */
+#title { left: 0; top: 150px; width: 1080px; text-align: center; pointer-events: none; }
+#title .h {
+  font-size: 74px; font-weight: 500; line-height: 80px; letter-spacing: -0.6px; white-space: nowrap;
+  filter: drop-shadow(0 0 16px rgba(236, 140, 255, 0.55)) drop-shadow(0 4px 18px rgba(30, 0, 70, 0.6));
 }
-#snd .ico {
-  width: 84px; height: 84px; border-radius: 50%; box-sizing: border-box;
-  display: flex !important; align-items: center; justify-content: center;
+#title .h.live { animation: glowBreath 3.2s ease-in-out infinite; }
+#title .w { display: inline-block; white-space: pre; }
+#title .sub {
+  margin-top: 14px; font-size: 38px; font-weight: 400; line-height: 1.3; white-space: pre-line;
+  color: #d9a0ff; text-shadow: 0 2px 12px rgba(20, 0, 60, 0.7);
+}
+@keyframes glowBreath {
+  0%, 100% { transform: scale(1); filter: drop-shadow(0 0 14px rgba(236, 140, 255, 0.45)) drop-shadow(0 4px 18px rgba(30, 0, 70, 0.6)); }
+  50% { transform: scale(1.025); filter: drop-shadow(0 0 26px rgba(244, 170, 255, 0.85)) drop-shadow(0 4px 18px rgba(30, 0, 70, 0.6)); }
+}
+
+/* ------------------------------------------------------------------ step 1: style cards */
+.card { position: absolute; top: 498px; width: 480px; height: 800px; opacity: 0; transition: transform 0.4s var(--spring), filter 0.35s, opacity 0.35s; }
+.card[data-st="real"] { left: 40px; }
+.card[data-st="anime"] { left: 560px; }
+.card > svg { position: absolute; left: 0; top: 0; width: 480px; height: 800px; overflow: visible; }
+.card .clip { position: absolute; left: 0; top: 0; width: 480px; height: 800px; overflow: hidden; }
+/* the card's picture (Figma: the girl and the pink glow, drawn in the card's own coordinates) */
+.card .pic { position: absolute; left: 0; top: 0; width: 480px; height: 800px; background: center / 100% 100% no-repeat; transform-origin: 50% 60%; }
+.card[data-st="real"] .pic { background-image: var(--img-card-real); }
+.card[data-st="anime"] .pic { background-image: var(--img-card-anime); }
+.ol .base { fill: none; stroke: url(#gStroke); stroke-width: 5; }
+.ol .neon { fill: none; stroke: var(--neon); stroke-width: 6; opacity: 0; transition: opacity 0.3s; }
+.ol { transition: filter 0.3s; }
+.card .tag {
+  position: absolute; left: 52px; top: 52px; height: 85px; padding: 0 26px; box-sizing: border-box;
+  display: flex; align-items: center; border-radius: 43px;
+  font-size: 29px; font-weight: 500; letter-spacing: 0.6px;
+  background: rgba(36, 10, 80, 0.38); border: 2px solid rgba(255, 255, 255, 0.36);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+}
+.check {
+  position: absolute; width: 84px; height: 84px; transform: scale(0);
+  transition: transform 0.4s cubic-bezier(0.3, 1.8, 0.5, 1);
+  filter: drop-shadow(0 0 14px rgba(190, 100, 255, 0.9));
+}
+.check svg { width: 100%; height: 100%; display: block; }
+.card .check { left: 370px; top: 690px; }
+/* at the start the two cards take turns to glow softly: pick one */
+#cards.idle .card { animation: cardPulse 2.4s ease-in-out infinite; }
+#cards.idle .card[data-st="anime"] { animation-delay: 1.2s; }
+#cards.idle .card .neon { animation: neonHint 2.4s ease-in-out infinite; }
+#cards.idle .card[data-st="anime"] .neon { animation-delay: 1.2s; }
+@keyframes cardPulse { 0%, 55%, 100% { transform: scale(1); } 25% { transform: scale(1.025); } }
+@keyframes neonHint { 0%, 55%, 100% { opacity: 0; } 25% { opacity: 0.55; } }
+/* picked: a neon violet outline (not white), the check, the other card steps back */
+.card.sel { transform: scale(1.03); z-index: 2; }
+.card.sel .neon { opacity: 1; }
+.card.sel .ol { filter: drop-shadow(0 0 8px rgba(200, 110, 255, 0.95)) drop-shadow(0 0 26px rgba(160, 60, 255, 0.85)); animation: neonBeat 1.8s ease-in-out infinite; }
+.card.sel .check { transform: scale(1); }
+.card.dim { filter: brightness(0.72) saturate(0.75); transform: scale(0.97); }
+@keyframes neonBeat {
+  0%, 100% { filter: drop-shadow(0 0 8px rgba(200, 110, 255, 0.95)) drop-shadow(0 0 22px rgba(160, 60, 255, 0.75)); }
+  50% { filter: drop-shadow(0 0 12px rgba(220, 140, 255, 1)) drop-shadow(0 0 40px rgba(170, 70, 255, 0.95)); }
+}
+
+/* ------------------------------------------------------------------ step 2: her name, thumbnails */
+#pill {
+  left: 50%; top: 330px; height: 84px; padding: 0 36px;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: 16px; white-space: nowrap;
+  border-radius: 42px; box-sizing: border-box;
+  background: rgba(23, 10, 56, 0.45);
+  border: 2px solid rgba(178, 110, 255, 0.45);
+  box-shadow: 0 8px 30px rgba(20, 0, 60, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4); backdrop-filter: blur(16px) saturate(1.4);
+  font-size: 40px; line-height: 1; opacity: 0; z-index: 3; pointer-events: none;
+}
+#pill .nm { font-weight: 500; }
+#pill .dot { width: 12px; height: 12px; border-radius: 50%; background: #3ee07f; animation: online 1.8s ease-out infinite; }
+#pill .role {
+  font-weight: 400;
+  background: linear-gradient(90deg, #b47cff 0%, #e793ff 55%, #b47cff 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+@keyframes online { 0% { box-shadow: 0 0 0 0 rgba(62, 224, 127, 0.6); } 100% { box-shadow: 0 0 0 12px rgba(62, 224, 127, 0); } }
+
+#thumbs { left: 800px; top: 516px; width: 202px; height: 904px; pointer-events: none; }
+.th { position: absolute; left: 0; width: 202px; height: 202px; opacity: 0; cursor: pointer; pointer-events: auto; transition: transform 0.3s var(--spring), filter 0.3s; }
+.th > svg { position: absolute; left: 0; top: 0; width: 202px; height: 202px; overflow: visible; }
+.th .clip { position: absolute; left: 0; top: 0; width: 202px; height: 202px; background: center / 100% 100% no-repeat; }
+.th .ol .base { stroke-width: 2.4; }
+.th .ol .neon { stroke-width: 3.5; }
+.th:hover { transform: scale(1.04); }
+.th.cur { transform: scale(1.06); }
+.th.cur .neon { opacity: 1; }
+.th.cur .ol { filter: drop-shadow(0 0 5px rgba(210, 120, 255, 0.95)) drop-shadow(0 0 16px rgba(160, 60, 255, 0.85)); }
+.th:not(.cur) { filter: brightness(0.82) saturate(0.85); }
+/* up / down: small round buttons at the ends of the column, just overlapping the end thumbnails */
+.nav {
+  left: 869px; width: 64px; height: 64px; border-radius: 50%; box-sizing: border-box; z-index: 3;
   background:
     radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.26) 0%, rgba(255, 255, 255, 0) 50%),
-    linear-gradient(135deg, rgba(64, 22, 130, 0.62), rgba(110, 40, 190, 0.5));
-  border: 2px solid rgba(190, 130, 255, 0.75);
-  box-shadow: 0 6px 18px rgba(14, 0, 44, 0.45), 0 0 18px rgba(160, 80, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
-  -webkit-backdrop-filter: blur(14px) saturate(1.4); backdrop-filter: blur(14px) saturate(1.4);
-  transition: transform 0.25s cubic-bezier(0.3, 1.4, 0.5, 1), border-color 0.25s, box-shadow 0.25s;
+    linear-gradient(135deg, rgba(110, 40, 210, 0.85), rgba(170, 60, 240, 0.8));
+  border: 2px solid rgba(226, 180, 255, 0.85);
+  box-shadow: 0 6px 18px rgba(14, 0, 44, 0.5), 0 0 16px rgba(170, 80, 255, 0.55);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  cursor: pointer; opacity: 0; pointer-events: none;
+  transition: transform 0.22s var(--spring), box-shadow 0.22s;
 }
-#snd:hover .ico { transform: scale(1.06); border-color: #ecccff; box-shadow: 0 6px 18px rgba(14, 0, 44, 0.45), 0 0 26px rgba(190, 110, 255, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.25); }
-#snd:active .ico { transform: scale(0.92); transition-duration: 0.08s; }
-#snd svg { width: 44px; height: 44px; overflow: visible; fill: none; stroke: #fff; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-#snd .spk { fill: #fff; stroke-width: 1.4; }
-#snd .w1, #snd .w2 { transition: opacity 0.25s, transform 0.3s; transform-origin: 12px 12px; }
-#snd .x { opacity: 0; transition: opacity 0.2s; }
-#snd.off .w1, #snd.off .w2 { opacity: 0; transform: scale(0.6); }
-#snd.off .x { opacity: 1; }
-#snd.off .ico { border-color: rgba(190, 130, 255, 0.5); }
+.nav.on { pointer-events: auto; }
+.nav i { position: absolute; left: 50%; top: 50%; width: 16px; height: 16px; border: solid #fff; border-width: 4px 0 0 4px; transform: translate(-50%, -25%) rotate(45deg); }
+#navDown i { transform: translate(-50%, -75%) rotate(-135deg); }
+#navUp { top: 468px; }
+#navDown { top: 1404px; }
+.nav:hover { transform: scale(1.1); box-shadow: 0 6px 18px rgba(14, 0, 44, 0.5), 0 0 24px rgba(200, 120, 255, 0.85); }
+.nav:active { transform: scale(0.9); }
 
 /* ------------------------------------------------------------------ chat */
+/* her message sits above the button and stops short of the thumbnails (step 2) */
 #chat {
-  left: 36px; width: 1008px; bottom: 502px;
+  left: 24px; width: 752px; bottom: 486px;
   display: flex; flex-direction: column; justify-content: flex-end; gap: 18px;
   pointer-events: none;
-  transition: bottom 0.7s cubic-bezier(0.3, 0.8, 0.3, 1);
 }
-.msg { display: flex; align-items: flex-start; gap: 18px; transform-origin: 0 0; }
+#chat.wide { width: 962px; }
+.msg { display: flex; align-items: center; gap: 16px; transform-origin: 0 100%; }
 .msg .ava {
-  flex: none; width: 90px; height: 90px; border-radius: 50%; box-sizing: border-box;
-  background: var(--img-ava) center / cover;
+  flex: none; width: 84px; height: 84px; border-radius: 50%; box-sizing: border-box;
+  background: center 8% / 118% no-repeat, linear-gradient(160deg, #5a24b4, #2a0f66);
   border: 3px solid #9b5cff;
   box-shadow: 0 0 0 3px rgba(23, 12, 68, 0.55), 0 0 22px rgba(170, 90, 255, 0.65);
   position: relative;
 }
 .msg .ava::after { /* online dot */
-  content: ""; position: absolute; right: -2px; bottom: 2px; width: 20px; height: 20px; border-radius: 50%;
+  content: ""; position: absolute; right: -2px; bottom: 0; width: 20px; height: 20px; border-radius: 50%;
   background: #3ee07f; border: 3px solid #1b0d48;
 }
-.msg.cont .ava { visibility: hidden; }
-.bw { position: relative; min-width: 0; flex: 1; } /* the bubble spans the column, flush with the options */
+.bw { position: relative; min-width: 0; flex: 1; }
 .bub {
-  position: relative;
-  padding: 26px 38px 28px;
-  border-radius: 12px 36px 36px 36px;
-  font-size: 48px; line-height: 1.2; font-weight: 400;
+  position: relative; display: inline-block; max-width: 100%; box-sizing: border-box;
+  padding: 20px 28px 22px; white-space: nowrap;
+  border-radius: 10px 30px 30px 30px;
+  font-size: 34px; line-height: 1.24; font-weight: 400;
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0) 40%),
-    linear-gradient(90deg, rgba(40, 14, 92, 0.62) 0%, rgba(86, 28, 150, 0.55) 100%);
+    linear-gradient(90deg, rgba(40, 14, 92, 0.6) 0%, rgba(86, 28, 150, 0.52) 100%);
   border: 2px solid rgba(150, 82, 255, 0.95);
   box-shadow: 0 10px 34px rgba(16, 0, 48, 0.45), 0 0 22px rgba(140, 70, 255, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.14);
   -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5);
   transform-origin: 0 0;
 }
-.bub.typing { display: inline-flex; gap: 14px; padding: 36px 40px; }
-.bub.typing i { width: 18px; height: 18px; border-radius: 50%; background: #e7d2ff; animation: dots 1s ease-in-out infinite; }
+.bub.typing { display: inline-flex; gap: 12px; padding: 30px 32px; }
+.bub.typing i { width: 14px; height: 14px; border-radius: 50%; background: #e7d2ff; animation: dots 1s ease-in-out infinite; }
 .bub.typing i:nth-child(2) { animation-delay: 0.15s; }
 .bub.typing i:nth-child(3) { animation-delay: 0.3s; }
 @keyframes dots { 0%, 60%, 100% { transform: translateY(0); opacity: 0.45; } 30% { transform: translateY(-12px); opacity: 1; } }
 
-/* ------------------------------------------------------------------ reply options */
-/* Options and the CTA span the full content width, x 36-1044 (from the avatar's left edge to the
-   bubbles' right edge, 36 px margins); their bottom sits on the content line (y 1730). */
-#choices {
-  left: 36px; width: 1008px; bottom: 190px;
-  display: flex; flex-direction: column; gap: 22px;
-}
-.chip {
-  position: relative; box-sizing: border-box;
-  display: flex; align-items: center; gap: 20px;
-  min-height: 120px; padding: 20px 30px 20px 24px;
-  border-radius: 60px;
-  font-size: 40px; font-weight: 500; line-height: 1.2; letter-spacing: -0.2px;
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.10) 0%, rgba(255, 255, 255, 0) 45%),
-    linear-gradient(90deg, rgba(34, 12, 82, 0.66) 0%, rgba(74, 24, 140, 0.58) 100%);
-  border: 2.5px solid rgba(170, 100, 255, 0.85);
-  box-shadow: 0 10px 30px rgba(14, 0, 44, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  -webkit-backdrop-filter: blur(16px) saturate(1.4); backdrop-filter: blur(16px) saturate(1.4);
-  cursor: pointer; opacity: 0;
-  transition: transform 0.28s cubic-bezier(0.3, 1.4, 0.5, 1), border-color 0.25s, background 0.25s, box-shadow 0.25s, opacity 0.3s, filter 0.3s;
-}
-.chip .ic { /* a quiet glass mark: a chat bubble with a small heart */
-  flex: none; width: 62px; height: 62px; border-radius: 50%; box-sizing: border-box;
-  display: flex !important; align-items: center; justify-content: center;
-  background:
-    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0) 46%),
-    radial-gradient(circle at 70% 85%, rgba(214, 92, 255, 0.45) 0%, rgba(214, 92, 255, 0) 62%),
-    rgba(126, 60, 220, 0.32);
-  border: 1.5px solid rgba(236, 200, 255, 0.55);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 4px 12px rgba(20, 0, 50, 0.35);
-  transition: transform 0.28s cubic-bezier(0.3, 1.4, 0.5, 1), background 0.25s, box-shadow 0.25s, border-color 0.25s;
-}
-.chip .ic svg { width: 40px; height: 40px; overflow: visible; }
-.chip .ic .h { fill: #f6c8ff; transition: fill 0.25s, transform 0.3s; transform-origin: 12px 10px; }
-.chip span { flex: 1; }
-/* the call to action: a soft glow runs over the two options in turn */
-.chip::before {
-  content: ""; position: absolute; inset: -3px; border-radius: inherit; pointer-events: none;
-  box-shadow: 0 0 0 2px rgba(220, 160, 255, 0.85), 0 0 34px rgba(190, 100, 255, 0.75);
-  opacity: 0; animation: chipGlow 2.6s ease-in-out infinite;
-}
-.chip:nth-child(2)::before { animation-delay: 1.3s; }
-@keyframes chipGlow { 0%, 60%, 100% { opacity: 0; } 25% { opacity: 1; } }
-.chip:hover {
-  transform: translateY(-6px) scale(1.02);
-  border-color: #ecccff;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 50%),
-    linear-gradient(90deg, rgba(104, 36, 196, 0.82) 0%, rgba(160, 58, 232, 0.74) 100%);
-  box-shadow: 0 16px 38px rgba(14, 0, 44, 0.5), 0 0 0 3px rgba(214, 150, 255, 0.45), 0 0 40px rgba(186, 92, 255, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.25);
-}
-.chip:hover .ic {
-  transform: scale(1.08);
-  border-color: rgba(250, 230, 255, 0.85);
-  box-shadow: 0 0 22px rgba(220, 140, 255, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.45);
-}
-.chip:hover .ic .h, .chip.sel .ic .h { fill: #fff; transform: scale(1.18); }
-.chip:active { transform: scale(0.97); transition-duration: 0.1s; }
-/* picked: neon violet for a moment, the other one steps back, then both leave */
-.chip.sel {
-  border-color: #f0d6ff;
-  background: var(--grad);
-  box-shadow: 0 0 0 3px rgba(200, 120, 255, 0.7), 0 0 30px 6px rgba(180, 80, 255, 0.9), 0 0 80px 14px rgba(150, 60, 255, 0.5);
-  transform: scale(1.03);
-}
-.chip.sel::before, .chip.off::before, #choices.done .chip::before { animation: none; opacity: 0; }
-.chip.in { opacity: 1; }
-.chip.off { opacity: 0.4; filter: saturate(0.5); transform: scale(0.97); }
-#choices.done .chip { pointer-events: none; }
-
-/* ------------------------------------------------------------------ CTA button */
+/* ------------------------------------------------------------------ the button */
 /* taps are handled on the stage (game.js), so it never swallows them */
 .btn { pointer-events: none; }
 .btn { --w: 961px; --h: 222px; --i2: 32px; --spread: 28px; --fs: 60px; width: var(--w); height: var(--h); opacity: 0; }
 .btn .r1, .btn .r2, .btn .core { position: absolute; box-sizing: border-box; border-radius: 200px; }
-/* The two soft shapes around the button are its ripples. On every beat the button swells a little
-   and they come out from under it one after the other, growing by the same distance on all sides
-   (the edges move; nothing is scaled), and fade as they spread. */
+/* The two soft shapes around the button are its ripples: on every beat the button swells a little
+   and they come out from under it one after the other, growing by the same distance on all sides. */
 .btn .r1, .btn .r2 {
   z-index: 0; opacity: 0;
   top: var(--i2); right: var(--i2); bottom: var(--i2); left: var(--i2);
@@ -235,42 +279,36 @@ html, body {
 }
 .btn .core {
   inset: var(--i2); overflow: hidden; z-index: 2;
-  display: flex; align-items: center; justify-content: center; gap: 18px;
+  display: flex; align-items: center; justify-content: center;
   background: var(--grad);
   border: 2px solid #b578ff;
   box-shadow: 0 12px 40px rgba(150, 50, 255, 0.55), inset 0 2px 0 rgba(255, 255, 255, 0.35), inset 0 -6px 16px rgba(70, 0, 160, 0.35);
   font-size: var(--fs); font-weight: 600; line-height: 1; white-space: nowrap;
   text-shadow: 0 0 20px rgba(255, 212, 244, 0.5);
   animation: beat var(--beat) cubic-bezier(0.3, 0, 0.3, 1) infinite;
+  transition: filter 0.4s, background 0.4s, border-color 0.4s, opacity 0.4s;
 }
-.btn .t { position: relative; z-index: 2; display: flex; align-items: center; gap: 18px; }
-.btn .t svg { width: 0.8em; height: 0.8em; }
+.btn .t { position: relative; z-index: 2; display: block; }
 .btn .shine {
   position: absolute; top: 0; bottom: 0; left: -40%; width: 30%;
   background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0));
   transform: skewX(-20deg); z-index: 1;
   animation: shine calc(var(--beat) * 2) ease-in-out infinite;
 }
-@keyframes beat { /* one swell per beat; the ripples leave right after it */
+@keyframes beat {
   0% { transform: scale(1); box-shadow: 0 12px 40px rgba(150, 50, 255, 0.5), inset 0 2px 0 rgba(255, 255, 255, 0.35), inset 0 -6px 16px rgba(70, 0, 160, 0.35); }
   16% { transform: scale(1.03); box-shadow: 0 12px 56px rgba(175, 75, 255, 0.85), inset 0 2px 0 rgba(255, 255, 255, 0.45), inset 0 -6px 16px rgba(70, 0, 160, 0.3); animation-timing-function: cubic-bezier(0.4, 0, 0.3, 1); }
   48%, 100% { transform: scale(1); box-shadow: 0 12px 40px rgba(150, 50, 255, 0.5), inset 0 2px 0 rgba(255, 255, 255, 0.35), inset 0 -6px 16px rgba(70, 0, 160, 0.35); }
 }
 @keyframes shine { 0%, 45% { left: -40%; } 85%, 100% { left: 120%; } }
-#cta, #go { --w: 1072px; left: 4px; top: 1540px; } /* core x 36-1044 like the options, its bottom on the content line */
-
-/* the start: a short line over the button, breathing gently */
-#title {
-  left: 36px; width: 1008px; bottom: 380px; /* 36 px above the button */
-  text-align: center; font-size: 58px; line-height: 1.15; font-weight: 500; letter-spacing: -0.3px;
-  text-shadow: 0 2px 10px rgba(10, 0, 40, 0.6), 0 0 26px rgba(196, 110, 255, 0.55);
-  opacity: 0; pointer-events: none;
-}
-#title span { display: inline-block; animation: breathe 2.8s ease-in-out infinite; }
-@keyframes breathe { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.035); } }
+/* disabled until a card is picked: quiet, no pulse */
+.btn.off .r1, .btn.off .r2, .btn.off .shine { animation: none; opacity: 0; }
+.btn.off .core { animation: none; filter: saturate(0.25) brightness(0.62); border-color: rgba(181, 120, 255, 0.4); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.12); }
+.btn.off .t { opacity: 0.6; }
+#btn { left: 59.5px; top: 1474px; }
 
 /* ------------------------------------------------------------------ effects */
-#fx { pointer-events: none; overflow: hidden; }
+#fx { pointer-events: none; overflow: hidden; z-index: 6; }
 .spark {
   position: absolute; left: 0; top: 0; width: 34px; height: 34px; margin: -17px 0 0 -17px;
   background: radial-gradient(circle, #fff 0 12%, rgba(255, 210, 255, 0.9) 22%, rgba(200, 120, 255, 0) 60%);
@@ -280,13 +318,4 @@ html, body {
   position: absolute; left: 0; top: 0; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%;
   border: 4px solid rgba(255, 255, 255, 0.85); box-sizing: border-box; box-shadow: 0 0 16px rgba(200, 120, 255, 0.8);
 }
-
-/* ------------------------------------------------------------------ legal */
-#legal {
-  left: 50px; top: 1762px; width: 980px;
-  text-align: center; text-transform: uppercase;
-  font-size: 18px; line-height: 1.3; font-weight: 400; letter-spacing: 0.2px;
-  color: rgba(236, 222, 240, 0.78);
-  pointer-events: none;
-  visibility: hidden; /* hidden for now; its room is kept */
-}
+/* the room for a disclaimer (y 1720-1920) is kept free */

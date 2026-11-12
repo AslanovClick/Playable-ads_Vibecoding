@@ -1,51 +1,45 @@
 (function () {
   "use strict";
 
-  var CFG = window.PLAYABLE_CONFIG, T = CFG.text, CLIPS = window.PLAYABLE_CLIPS || {};
-  var W = 1080, H = 1920; // Figma frame
+  var CFG = window.PLAYABLE_CONFIG, T = CFG.text, GIRLS = CFG.girls, CLIPS = window.PLAYABLE_CLIPS;
+  var W = 1080, H = 1920;
 
-  // Loops: cross-fade from `out` back to `in` (seconds), where her pose matches best (measured
-  // frame by frame on the clips).
-  var LOOPS = { intro: [4.375, 0], idle1: [4.542, 0.667], idle2: [4.0, 0.208], cta: [5.0, 0.292] };
-  // When a reply is picked during an idle loop, the reaction starts at the next moment the loop is
-  // back in the pose the reaction clips start from (seconds); never later than WAIT ms.
-  var WIN = { intro: [[0, 0.1], [4.1, 4.6]], idle1: [[0, 1.0], [3.75, 4.6]], idle2: [[0, 0.92], [3.5, 4.05]] };
-  var WAIT = 2000, WAIT_START = 1300; // after the start button the chat should not keep you waiting
-  // The wide scenes (start, hook, first reaction) are lifted so her head sits right under the logo;
-  // the camera comes down to the normal framing with the push-in of the "good girl" line.
-  var LIFT = 140;
-  // Joins where the camera framing differs between the end of one clip and the start of the next:
-  // the next clip starts zoomed / shifted [scale, x px, y px] so it lines up with the last frame of
-  // the one before, cross-fades in, then eases back to its own framing (a slow camera move).
-  // "soft": her pose differs too (head tilt, hand), so a light haze peaks mid-fade to hide the double image.
-  var JOIN = {
-    "maybe>tension": [1.16, 54, 129, "soft"], // she leaned in; the push-in starts from there
-    "tension>idle2": [1.23, 10, 159], "tension>bad": [1.24, 10, 159], "tension>tease": [1.24, 10, 159],
-    "bad>final": [1.02, 0, 5],
-    "tease>final": [1, -5, 5, "soft"], // hand on the collarbone -> chin on the hand
+  // ---------------------------------------------------------------- timings (measured on the clips)
+  // Loops: cross-fade from `out` back to `in` (seconds), where her pose matches best.
+  var LOOPS = {
+    real_jade_loop: [5.0, 0.21], real_mia_loop: [4.46, 0.58], real_scarlett_loop: [4.21, 0.46], real_yuna_loop: [5.0, 0.29],
+    anime_jade_loop: [4.58, 0.29], anime_mia_loop: [4.12, 0.12], anime_scarlett_loop: [5.0, 0.25], anime_yuna_loop: [5.0, 0],
+    real_jade_greet: [5.0, 0.12], real_mia_greet: [5.0, 0.46], real_scarlett_greet: [5.0, 0.29], real_yuna_greet: [5.0, 0.12],
+    anime_jade_greet: [5.0, 0], anime_mia_greet: [5.0, 0.08], anime_scarlett_greet: [4.5, 0.04], anime_yuna_greet: [5.0, 0.21],
   };
-  // Seconds into a clip (her voice) when text comes in
-  var AT = { hookMsg: 0.1, hookOptions: 3.2, react: 0.3, tensionMsg: 0.35, tensionOptions: 6.0, finalMsg: 0.35, cta: 1.9 };
+  var WIN = {}, WAIT = 1000; // (hand-over windows: none needed any more, the clips just cross-fade)
+  // The greeting is filmed closer than the loop: it starts scaled / shifted [s, x, y] (source px,
+  // about the frame's centre) to line up with her in the loop, then eases to its own framing while
+  // the camera moves in.
+  var GREET_MATCH = {
+    real_jade: [0.78, -165, 130], real_mia: [0.72, -160, 125], real_scarlett: [0.79, -145, 150], real_yuna: [0.78, -195, 140],
+    anime_jade: [0.8, -135, 180], anime_mia: [0.81, -150, 155], anime_scarlett: [0.78, -155, 150], anime_yuna: [0.83, -190, 150],
+  };
+  // Where the 1090 x 1920 source frame sits on the stage: [scale, x, y]. Step 2: large, on the
+  // left of the thumbnails, her head under her name; step 3: centred, a little higher.
+  var FRAME = { s2: [1.3, -188, -265], s3: [1, -5, 38] };
+  var PILL_TOP = { s2: 330, s3: 150 };
 
-  // The bottom line of the content (options, message, CTA): the same distance above the disclaimer
-  // in every scene, so nothing jumps. GAP: between a message and what is under it.
-  var LINE = 1730, GAP = 24;
-  // Where the chat sits (bottom edge of the message): alone on the line, or above the CTA (158 high)
-  var CHAT_Y = { low: LINE, cta: LINE - 158 - GAP };
-
-  function $(id) { return document.getElementById(id); }
-  var stage = $("stage"), cam = $("cam"), videos = $("videos"), chat = $("chat"), snd = $("snd");
-  var choices = $("choices"), cta = $("cta"), go = $("go"), fx = $("fx");
-
-  var Q = (function () { var q = {}; location.search.replace(/[?&]([^=&]+)=?([^&]*)/g, function (_, k, v) { q[k] = v; }); return q; })();
-
-  // ---------------------------------------------------------------- layout
-  var view = window.VIEW; // scale and offset of the stage, kept up to date by fit.js
-  function toStage(e) { return { x: (e.clientX - view.ox) / view.s, y: (e.clientY - view.oy) / view.s }; }
+  // Layout: her message sits on this line, above the button
+  var CHAT_BOTTOM = 1418;
 
   // ---------------------------------------------------------------- helpers
+  function $(id) { return document.getElementById(id); }
+  var stage = $("stage"), hero = $("hero"), heroV = $("heroV"), cardsEl = $("cards"), thumbsEl = $("thumbs");
+  var titleEl = $("title"), pill = $("pill"), chat = $("chat"), btn = $("btn"), fx = $("fx");
+  var navUp = $("navUp"), navDown = $("navDown");
+  var Q = (function () { var q = {}; location.search.replace(/[?&]([^=&]+)=?([^&]*)/g, function (_, k, v) { q[k] = v; }); return q; })();
+  var view = window.VIEW;
+  function toStage(e) { return { x: (e.clientX - view.ox) / view.s, y: (e.clientY - view.oy) / view.s }; }
+
   var EASE_OUT = "cubic-bezier(0.22, 1, 0.36, 1)";
   var SPRING = "cubic-bezier(0.34, 1.56, 0.64, 1)";
+  var CAMERA = "cubic-bezier(0.45, 0, 0.2, 1)";
   function anim(el, frames, ms, easing, delay) {
     if (!el.animate) { var last = frames[frames.length - 1]; for (var k in last) if (k !== "offset") el.style[k] = last[k]; return { finished: Promise.resolve(), cancel: function () {} }; }
     var a = el.animate(frames, { duration: ms, easing: easing || EASE_OUT, delay: delay || 0, fill: "both" });
@@ -61,98 +55,88 @@
   function show(el, ms, delay, from, to) {
     return anim(el, [{ opacity: 0, transform: from || "translateY(30px)" }, { opacity: 1, transform: to || "none" }], ms || 500, EASE_OUT, delay);
   }
+  function hide(el, ms, delay, to, from) {
+    return anim(el, [{ opacity: getComputedStyle(el).opacity, transform: from || "none" }, { opacity: 0, transform: to || "translateY(-20px)" }], ms || 400, "cubic-bezier(0.4, 0, 0.7, 1)", delay);
+  }
   var state = "start";
   function later(ms, fn) { var s = state; return setTimeout(function () { if (state === s) fn(); }, ms); }
   function mk(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html) e.innerHTML = html; return e; }
+  function frameCss(f) { return "translate(" + f[1] + "px," + f[2] + "px) scale(" + f[0] + ")"; }
 
   // ---------------------------------------------------------------- sound (synthesised, no files)
   var Sound = (function () {
-    var ctx = null, out = null, noise = null;
+    var ctx = null, out = null, on = false;
     function init() {
       try {
         if (!ctx) {
           var AC = window.AudioContext || window.webkitAudioContext;
-          ctx = new AC();
-          out = ctx.createGain(); out.gain.value = 0.7; out.connect(ctx.destination);
-          noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
-          var d = noise.getChannelData(0);
-          for (var i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+          ctx = new AC(); out = ctx.createGain(); out.gain.value = 0.7; out.connect(ctx.destination);
         }
         if (ctx.state === "suspended") ctx.resume();
       } catch (e) { ctx = null; }
     }
-    var on = false;
     function ok() { return on && ctx && ctx.state === "running"; }
     function tone(f, t, dur, type, vol, f2) {
       var o = ctx.createOscillator(), g = ctx.createGain();
-      o.type = type || "sine";
-      o.frequency.setValueAtTime(f, t);
+      o.type = type || "sine"; o.frequency.setValueAtTime(f, t);
       if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
       o.connect(g); g.connect(out); o.start(t); o.stop(t + dur + 0.05);
     }
-    function hiss(t, dur, freq, q, vol, type, attack) {
-      var s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
-      s.buffer = noise; s.loop = true;
-      f.type = type || "bandpass"; f.frequency.setValueAtTime(freq, t); f.Q.value = q;
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(vol, t + (attack || 0.002));
-      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-      s.connect(f); f.connect(g); g.connect(out);
-      s.start(t, Math.random() * 0.8); s.stop(t + dur + 0.05);
-      return f;
-    }
     return {
-      init: init,
-      tap: function () { if (!ok()) return; tone(660, ctx.currentTime, 0.12, "sine", 0.18, 330); },
-      pop: function () { if (!ok()) return; tone(780, ctx.currentTime, 0.09, "triangle", 0.1, 1250); },
+      init: init, setOn: function (v) { on = v; },
+      tap: function () { if (ok()) tone(660, ctx.currentTime, 0.12, "sine", 0.18, 330); },
+      pop: function () { if (ok()) tone(780, ctx.currentTime, 0.09, "triangle", 0.1, 1250); },
+      swish: function () { if (ok()) tone(420, ctx.currentTime, 0.16, "sine", 0.08, 880); },
       ping: function () { // incoming message
         if (!ok()) return; var t = ctx.currentTime;
         tone(1318.5, t, 0.32, "sine", 0.2); tone(1760, t + 0.085, 0.5, "sine", 0.18); tone(3520, t + 0.085, 0.25, "sine", 0.025);
       },
-      sparkle: function () {
-        if (!ok()) return; var t = ctx.currentTime;
-        for (var k = 0; k < 5; k++) tone(1900 + Math.random() * 1900, t + k * 0.05, 0.28, "sine", 0.06);
-      },
-      setOn: function (v) { on = v; },
+      sparkle: function () { if (!ok()) return; var t = ctx.currentTime; for (var k = 0; k < 5; k++) tone(1900 + Math.random() * 1900, t + k * 0.05, 0.28, "sine", 0.06); },
       suspend: function () { try { if (ctx) ctx.suspend(); } catch (e) {} },
       resume: function () { try { if (ctx) ctx.resume(); } catch (e) {} },
     };
   })();
 
-  // ---------------------------------------------------------------- video player
-  // Four stacked <video> layers. A new clip starts on a free layer and fades in over the current one
-  // once its first frame is on screen (the sound of the old one fades out with it); loops fade into a
-  // fresh copy of themselves at their loop point instead of jumping.
-  var Player = (function () {
-    var els = Array.prototype.slice.call(videos.querySelectorAll("video"));
-    var cur = null, z = 1, urls = {}, seq = 0, audible = false, unlocked = false, pending = null;
-    els.forEach(function (v) { v.muted = true; v.setAttribute("muted", ""); v.playsInline = true; v._clip = null; });
-
-    function url(name) {
-      if (urls[name]) return urls[name];
-      var s = CLIPS[name];
-      if (s.indexOf("data:") === 0) {
-        var bin = atob(s.slice(s.indexOf(",") + 1)), n = bin.length, arr = new Uint8Array(n);
-        for (var i = 0; i < n; i++) arr[i] = bin.charCodeAt(i);
-        s = URL.createObjectURL(new Blob([arr], { type: "video/mp4" }));
-      }
-      return (urls[name] = s);
+  // ---------------------------------------------------------------- video players
+  // A player is a box in the source frame's pixels with a few stacked <video> layers. A new clip
+  // starts on a free layer and fades in over the current one once its first frame is on screen;
+  // loops fade into a fresh copy of themselves at their loop point instead of jumping.
+  var urls = {};
+  function url(name) {
+    if (urls[name]) return urls[name];
+    var s = CLIPS[name].src;
+    if (s.indexOf("data:") === 0) {
+      var bin = atob(s.slice(s.indexOf(",") + 1)), n = bin.length, arr = new Uint8Array(n);
+      for (var i = 0; i < n; i++) arr[i] = bin.charCodeAt(i);
+      s = URL.createObjectURL(new Blob([arr], { type: "video/mp4" }));
     }
-    function load(v, name) {
-      if (v._clip !== name) { v._clip = name; v.src = url(name); try { v.load(); } catch (e) {} }
+    return (urls[name] = s);
+  }
+  var players = [];
+  function Player(box, n) {
+    var els = [], cur = null, z = 1, seq = 0, pending = null, blocked = false, hidden = [];
+    for (var i = 0; i < n; i++) {
+      var v = mk("video", "lay");
+      v.muted = true; v.setAttribute("muted", ""); v.setAttribute("playsinline", ""); v.setAttribute("webkit-playsinline", "");
+      v.playsInline = true; v.preload = "auto"; v.setAttribute("disableremoteplayback", ""); v._clip = null;
+      box.appendChild(v); els.push(v);
     }
-    // a layer for this clip: one that already holds it, else the oldest free one
-    function pick(name) {
+    function place(v, name) { // the clip's crop, in the source frame; scaled about the frame's centre
+      var c = CLIPS[name].crop;
+      v.style.left = c[0] + "px"; v.style.top = c[1] + "px"; v.style.width = c[2] + "px"; v.style.height = c[3] + "px";
+      v.style.transformOrigin = (545 - c[0]) + "px " + (960 - c[1]) + "px";
+    }
+    function load(v, name) { if (v._clip !== name) { v._clip = name; place(v, name); v.src = url(name); try { v.load(); } catch (e) {} } }
+    function pick(name) { // a layer that already holds the clip, else the oldest free one
       var free = els.filter(function (v) { return v !== cur && !v._busy; });
       if (!free.length) free = els.filter(function (v) { return v !== cur; });
       var has = free.filter(function (v) { return v._clip === name; });
       if (has.length) return has[0];
       var open = free.filter(function (v) { return !v._reserved; });
-      (open.length ? open : free).sort(function (a, b) { return (+a.style.zIndex || 0) - (+b.style.zIndex || 0); });
-      return (open.length ? open : free)[0];
+      var list = open.length ? open : free;
+      list.sort(function (a, b) { return (+a.style.zIndex || 0) - (+b.style.zIndex || 0); });
+      return list[0];
     }
     function firstFrame(v, cb) {
       var done = false;
@@ -161,69 +145,40 @@
       v.addEventListener("playing", function h() { v.removeEventListener("playing", h); setTimeout(go, 50); });
       setTimeout(go, 900);
     }
-    function fadeVolume(v, to, ms) { // (iOS keeps the volume at 1; there the old clip is simply quiet by then)
-      clearInterval(v._vt);
-      var from = v.volume, t0 = Date.now();
-      v._vt = setInterval(function () {
-        var k = Math.min(1, (Date.now() - t0) / ms);
-        try { v.volume = Math.max(0, Math.min(1, from + (to - from) * k)); } catch (e) {}
-        if (k >= 1) clearInterval(v._vt);
-      }, 30);
-    }
     function bringUp(v, fade) {
       var prev = cur, o = v._o;
-      cur = v;
-      v._busy = false;
+      cur = v; v._busy = false;
       if (prev && prev !== v) prev._busy = true;
       v.style.zIndex = ++z;
-      v.style.transition = "none";
-      v.style.opacity = 0;
-      // camera match: start framed like the last frame of the clip before, then ease to its own framing
+      v.style.transition = "none"; v.style.opacity = 0;
       if (v._settle) { try { v._settle.cancel(); } catch (e) {} v._settle = null; }
       v.style.transform = "";
-      var m = o.match;
-      if (m && (m[0] !== 1 || m[1] || m[2])) {
-        v._settle = anim(v, [{ transform: "translate(" + m[1] + "px," + m[2] + "px) scale(" + m[0] + ")" }, { transform: "none" }],
-          o.settle || 1800, "cubic-bezier(0.42, 0, 0.3, 1)", o.hold || 0);
+      if (o.match) { // start lined up with the clip before, then ease to its own framing
+        var m = o.match;
+        v._settle = anim(v, [{ transform: "translate(" + m[1] + "px," + m[2] + "px) scale(" + m[0] + ")" }, { transform: "none" }], o.settle || 1600, o.settleEase || CAMERA);
       }
-      // a haze over the whole picture at the middle of the fade, where two different poses overlap
-      if (prev && prev !== v && (o.soft || (m && m[3] === "soft"))) {
-        anim(cam, [{ filter: "none" }, { filter: "blur(7px) brightness(1.06)", offset: 0.5 }, { filter: "none" }], fade * 1000 + 160, "ease-in-out");
+      if (prev && prev !== v && o.soft) { // two different poses overlap mid-fade: a light haze hides it
+        anim(box, [{ filter: "none" }, { filter: "blur(7px) brightness(1.06)", offset: 0.5 }, { filter: "none" }], fade * 1000 + 160, "ease-in-out");
       }
-      clearInterval(v._vt);
-      try { v.volume = 1; } catch (e) {}
       void v.offsetWidth;
-      v.style.transition = "opacity " + fade + "s ease-in-out";
-      v.style.opacity = 1;
-      if (prev && prev !== v) {
-        fadeVolume(prev, 0, fade * 1000);
-        setTimeout(function () {
-          prev._busy = false;
-          if (cur === prev) return;
-          prev.style.transition = "none"; prev.style.opacity = 0;
-          try { prev.pause(); } catch (e) {}
-        }, fade * 1000 + 80);
-      }
+      v.style.transition = "opacity " + fade + "s ease-in-out"; v.style.opacity = 1;
+      if (prev && prev !== v) setTimeout(function () {
+        prev._busy = false;
+        if (cur === prev) return;
+        prev.style.transition = "none"; prev.style.opacity = 0;
+        try { prev.pause(); } catch (e) {}
+      }, fade * 1000 + 80);
       if (o.onStart) o.onStart();
     }
     function start(v) {
-      v.muted = !audible;
+      v.muted = true;
       var p = v.play();
-      if (p && p.catch) p.catch(function (err) {
-        if (err && err.name === "NotAllowedError" && !v.muted) { // sound not allowed yet: play on silently until a tap
-          audible = false;
-          v.muted = true;
-          var p2 = v.play();
-          if (p2 && p2.catch) p2.catch(function () { blocked = true; });
-          if (api.onSilenced) api.onSilenced();
-        } else if (!err || err.name !== "AbortError") blocked = true;
-      });
+      if (p && p.catch) p.catch(function (err) { if (!err || err.name !== "AbortError") blocked = true; });
     }
     function play(name, o) {
       o = o || {};
       var v = pick(name), fade = o.fade == null ? 0.4 : o.fade, my = ++seq;
-      v._reserved = false;
-      v._busy = true;
+      v._reserved = false; v._busy = true;
       load(v, name);
       v._o = o; v._fired = false;
       try { v.currentTime = o.at || 0; } catch (e) {}
@@ -239,7 +194,6 @@
       var v = pick(name);
       if (v._clip === name) { v._reserved = true; return; }
       load(v, name); v._reserved = true;
-      v.muted = true;
       var p = v.play(); // decode the first frame ahead of time
       if (p && p.then) p.then(function () { if (v !== cur && !v._busy) { v.pause(); try { v.currentTime = 0; } catch (e) {} } }, function () {});
     }
@@ -249,156 +203,133 @@
     }
     function tick() {
       var v = cur;
-      if (v && v._o && !v._fired && !v.paused && v.duration) {
-        var o = v._o, d = v.duration, t = v.currentTime;
-        var lf = o.loopFade || 0.45, lp = LOOPS[v._clip] || [d, 0];
-        if (o.loop && pending && (inWindow(v) || Date.now() > pending.until)) {
-          var p = pending; pending = null; v._fired = true;
-          p.fn(Date.now() > p.until);
-        } else if (o.loop && t >= Math.min(lp[0], d - 0.05) - lf / 2) {
-          v._fired = true;
-          play(v._clip, { loop: true, fade: lf, loopFade: o.loopFade, at: Math.max(0, lp[1] - lf / 2) });
-        } else if (!o.loop && t >= d - (o.lead || 0.45)) {
-          v._fired = true;
-          if (pending) { var q = pending; pending = null; q.fn(false); }
-          else if (o.onEnd) o.onEnd();
-        }
+      if (!v || !v._o || v._fired || v.paused || !v.duration) return;
+      var o = v._o, d = v.duration, t = v.currentTime;
+      var lf = o.loopFade || 0.45, lp = LOOPS[v._clip] || [d, 0];
+      if (o.loop && pending && (inWindow(v) || Date.now() > pending.until)) {
+        var p = pending; pending = null; v._fired = true;
+        p.fn(Date.now() > p.until);
+      } else if (o.loop && t >= Math.min(lp[0], d - 0.05) - lf / 2) {
+        v._fired = true;
+        play(v._clip, { loop: true, fade: lf, at: Math.max(0, lp[1] - lf / 2) });
+      } else if (!o.loop && t >= d - (o.lead || 0.45)) {
+        v._fired = true;
+        if (pending) { var q = pending; pending = null; q.fn(false); } else if (o.onEnd) o.onEnd();
       }
-      requestAnimationFrame(tick);
     }
-    requestAnimationFrame(tick);
-
-    var blocked = false, hidden = [];
     var api = {
-      play: play, preload: preload,
+      play: play, preload: preload, tick: tick,
       clip: function () { return cur ? cur._clip : null; },
-      // run fn at the next point the current clip can hand over smoothly: the end of a one-shot
-      // (instead of what it would play next), or a matching moment of a loop
+      // run fn at the next point the current clip can hand over smoothly
       next: function (fn, wait) { pending = { fn: fn, until: Date.now() + (wait || WAIT) }; },
+      cancel: function () { pending = null; },
       kick: function () { if (blocked && cur) { blocked = false; start(cur); } },
-      // sound on / off; switched on from a tap (inTap), every layer is started once in that tap so
-      // that mobile browsers let it play with sound later on
-      setAudible: function (on, inTap) {
-        audible = on;
-        els.forEach(function (v) { v.muted = !on; });
-        if (on && inTap && !unlocked) {
-          unlocked = true;
-          els.forEach(function (v) {
-            if (!v.paused || !v._clip) return;
-            var p = v.play();
-            if (p && p.then) p.then(function () { if (v !== cur && !v._busy) v.pause(); }, function () {});
-          });
-        }
-      },
       pause: function () { hidden = els.filter(function (v) { return !v.paused; }); hidden.forEach(function (v) { v.pause(); }); },
       resume: function () { hidden.forEach(function (v) { var p = v.play(); if (p && p.catch) p.catch(function () {}); }); hidden = []; },
-      onSilenced: null,
+      stop: function () { // frees the decoders
+        pending = null; seq++;
+        els.forEach(function (v) { try { v.pause(); } catch (e) {} v.removeAttribute("src"); try { v.load(); } catch (e) {} v._clip = null; v.remove(); });
+        players.splice(players.indexOf(api), 1);
+      },
     };
+    players.push(api);
     return api;
-  })();
-
-  // Plays a clip, lined up with the one before it where their framing differs (JOIN)
-  function cut(slot, o) {
-    var m = JOIN[Player.clip() + ">" + slot];
-    if (m) { o.match = m; o.fade = Math.max(o.fade || 0, 0.5); }
-    return Player.play(slot, o);
   }
-  function idle(slot) { cut(slot, { loop: true, fade: 0.45, settle: 2200 }); }
+  (function loop() { players.forEach(function (p) { p.tick(); }); requestAnimationFrame(loop); })();
+
+  // ---------------------------------------------------------------- shapes
+  var CARD_PATH = "M60 2.5H356.044C370.784 2.50012 384.96 8.16062 395.646 18.3125L459.604 79.0713C471.03 89.9269 477.5 104.998 477.5 120.759V740C477.5 771.756 451.756 797.5 420 797.5H135.875C120.897 797.5 106.509 791.655 95.7744 781.209L19.8994 707.376C8.7753 696.551 2.50011 681.689 2.5 666.167V60C2.50001 28.2436 28.2436 2.5 60 2.5Z";
+  var THUMB_PATH = "M25.25 1.05176H149.835C156.038 1.05176 162.004 3.43397 166.501 7.70605L193.416 33.2754C198.225 37.8438 200.948 44.1864 200.948 50.8193V176.75C200.948 190.114 190.114 200.948 176.75 200.948H54.3604C48.1053 200.948 42.093 198.526 37.585 194.189L8.47461 166.188C3.73203 161.627 1.05187 155.33 1.05176 148.749V25.25C1.05178 11.8859 11.8859 1.05176 25.25 1.05176Z";
+  var CHECK = '<svg viewBox="0 0 110 110"><circle cx="55" cy="55" r="53.9" fill="url(#gFill)" stroke="#fff" stroke-width="2.3"/><path d="M35 50.3L49.1 73L75 38" fill="none" stroke="#fff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  var DEFS = '<svg width="0" height="0" style="position:absolute"><defs>' +
+    '<linearGradient id="gStroke" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7F2EF6"/><stop offset="0.534" stop-color="#D04AFF"/><stop offset="1" stop-color="#7F2EF6"/></linearGradient>' +
+    '<linearGradient id="gFill" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7F2EF6"/><stop offset="0.534" stop-color="#D04AFF"/><stop offset="1" stop-color="#7F2EF6"/></linearGradient>' +
+    "</defs></svg>";
+  stage.insertAdjacentHTML("afterbegin", DEFS);
+  function outline(w, h, d) { return '<svg class="ol" viewBox="0 0 ' + w + " " + h + '"><path class="base" d="' + d + '"/><path class="neon" d="' + d + '"/></svg>'; }
+
+  // ---------------------------------------------------------------- titles
+  // The words come in one after another (rise, sharpen); then the line breathes with a soft glow.
+  var titleShown = false;
+  function setTitle(h, sub, delay) {
+    var hEl = titleEl.querySelector(".h"), sEl = titleEl.querySelector(".sub");
+    function fill() {
+      hEl.classList.remove("live");
+      hEl.style.opacity = ""; hEl.style.filter = ""; sEl.style.opacity = "";
+      hEl.innerHTML = "";
+      h.split(" ").forEach(function (word, i, all) {
+        var w = mk("span", "w"); w.textContent = word + (i < all.length - 1 ? " " : "");
+        hEl.appendChild(w);
+        anim(w, [{ opacity: 0, transform: "translateY(26px)", filter: "blur(10px)" }, { opacity: 1, transform: "none", filter: "blur(0)" }], 620, EASE_OUT, i * 90);
+      });
+      sEl.textContent = sub;
+      anim(sEl, [{ opacity: 0, transform: "translateY(16px)" }, { opacity: 1, transform: "none" }], 600, EASE_OUT, 280 + h.split(" ").length * 70);
+      setTimeout(function () { hEl.classList.add("live"); }, 1100);
+      titleEl.style.opacity = 1;
+    }
+    if (titleShown) {
+      anim(hEl, [{ opacity: 1, filter: "blur(0)" }, { opacity: 0, filter: "blur(8px)" }], 300, "ease-in");
+      anim(sEl, [{ opacity: 1 }, { opacity: 0 }], 260, "ease-in");
+      setTimeout(fill, 320 + (delay || 0));
+    } else setTimeout(fill, delay || 0);
+    titleShown = true;
+  }
+  function hideTitle() {
+    titleShown = false;
+    anim(titleEl, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-24px)" }], 420, "ease-in");
+  }
 
   // ---------------------------------------------------------------- chat
-  var lastRow = null;
-  function chatAt(y, instant) {
-    if (instant) { chat.style.transition = "none"; chat.style.bottom = (H - y) + "px"; void chat.offsetWidth; chat.style.transition = ""; }
-    else chat.style.bottom = (H - y) + "px";
-  }
-  // Moves the rows already there up by however much the new row pushes them, smoothly.
-  function flipRows(change) {
-    var rows = Array.prototype.slice.call(chat.children);
-    var before = rows.map(function (r) { return r.getBoundingClientRect().top; });
-    change();
-    rows.forEach(function (r, i) {
-      var d = (before[i] - r.getBoundingClientRect().top) / view.s;
-      if (Math.abs(d) > 1) anim(r, [{ transform: "translateY(" + d + "px)" }, { transform: "none" }], 450, EASE_OUT);
-    });
-  }
-  // An incoming message: "typing…" first, then the text pops in with a ping.
-  function say(text, typing, then) {
-    var row = mk("div", "msg"), ava = mk("i", "ava"), bw = mk("div", "bw");
+  function say(text, typing, ava) {
+    var row = mk("div", "msg"), a = mk("i", "ava"), bw = mk("div", "bw");
+    a.style.backgroundImage = ava;
     var dots = mk("div", "bub typing", "<i></i><i></i><i></i>");
-    row.appendChild(ava); row.appendChild(bw); bw.appendChild(dots);
-    var cont = lastRow && lastRow.parentNode === chat && !lastRow.classList.contains("gone");
-    if (cont) row.classList.add("cont");
-    lastRow = row;
-    flipRows(function () { chat.appendChild(row); });
-    if (!cont) anim(ava, [{ transform: "scale(0)", opacity: 0 }, { transform: "scale(1)", opacity: 1 }], 450, SPRING);
+    row.appendChild(a); row.appendChild(bw); bw.appendChild(dots);
+    chat.appendChild(row);
+    anim(a, [{ transform: "scale(0)", opacity: 0 }, { transform: "scale(1)", opacity: 1 }], 450, SPRING);
     anim(dots, [{ transform: "scale(0.3)", opacity: 0 }, { transform: "scale(1)", opacity: 1 }], 420, SPRING);
     Sound.pop();
     setTimeout(function () {
-      if (!row.parentNode || row.classList.contains("gone")) return; // the chat was cleared meanwhile
+      if (!row.parentNode || row.classList.contains("gone")) return; // cleared meanwhile
       var bub = mk("div", "bub");
       bub.textContent = text;
-      flipRows(function () { bw.replaceChild(bub, dots); });
+      bw.replaceChild(bub, dots);
+      var fs = 34;
+      // max-width keeps the bubble inside the row, so the text itself is measured (scrollWidth)
+      while (bub.scrollWidth > bub.clientWidth + 1 && fs > 24) { fs -= 1; bub.style.fontSize = fs + "px"; }
       anim(bub, [
         { transform: "scale(0.55)", opacity: 0, filter: "blur(6px)" },
         { transform: "scale(1.03)", opacity: 1, filter: "blur(0)", offset: 0.65 },
         { transform: "scale(1)", opacity: 1, filter: "blur(0)" },
       ], 520, "cubic-bezier(0.3, 0.9, 0.4, 1)");
       Sound.ping();
-      if (then) then(row);
-    }, typing == null ? 800 : typing);
+    }, typing == null ? 700 : typing);
     return row;
   }
   function clearChat(ms) {
-    lastRow = null;
-    Array.prototype.forEach.call(chat.children, function (r, i) {
+    Array.prototype.forEach.call(chat.children, function (r) {
       if (r.classList.contains("gone")) return;
       r.classList.add("gone");
-      anim(r, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-40px) scale(0.97)" }], ms || 420, "ease-in", i * 60)
+      anim(r, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-30px) scale(0.97)" }], ms || 320, "ease-in")
         .finished.then(function () { if (r.parentNode) r.parentNode.removeChild(r); });
     });
   }
 
-  // ---------------------------------------------------------------- reply options
-  var REPLY = '<svg viewBox="0 0 24 24"><path d="M4.5 6.2A2.7 2.7 0 0 1 7.2 3.5h9.6a2.7 2.7 0 0 1 2.7 2.7v7.1a2.7 2.7 0 0 1-2.7 2.7H11l-3.9 3.3v-3.3h0.1A2.7 2.7 0 0 1 4.5 13.3z" fill="none" stroke="#fff" stroke-width="1.7" stroke-linejoin="round"/><path class="h" d="M12 13s-2.9-1.8-2.9-3.7a1.55 1.55 0 0 1 2.9-.75 1.55 1.55 0 0 1 2.9.75C14.9 11.2 12 13 12 13z"/></svg>';
-  var onPick = null;
-  // Lays the two options out (still hidden) and returns where the chat has to end above them.
-  function setOptions(replies) {
-    choices.innerHTML = "";
-    choices.className = "abs";
-    replies.forEach(function (text, i) {
-      var c = mk("div", "chip", '<b class="ic">' + REPLY + "</b><span></span>");
-      c.querySelector("span").textContent = text;
-      c.setAttribute("data-i", i);
-      choices.appendChild(c);
-    });
-    return H - parseFloat(getComputedStyle(choices).bottom) - choices.offsetHeight - GAP;
-  }
-  function offerOptions(cb) {
-    Array.prototype.forEach.call(choices.children, function (c, i) {
-      anim(c, [{ opacity: 0, transform: "translateY(50px) scale(0.96)" }, { opacity: 1, transform: "none" }], 600, SPRING, i * 120)
-        .finished.then(function () { c.style.opacity = ""; c.style.transform = ""; c.classList.add("in"); }); // CSS (hover, press, pick) takes over
-    });
-    later(250, function () { onPick = cb; });
-  }
-  function pickOption(i) {
-    var cb = onPick;
-    onPick = null;
-    choices.classList.add("done");
-    var chips = Array.prototype.slice.call(choices.children), c = chips[i];
-    chips.forEach(function (x, k) { x.classList.toggle("sel", k === i); x.classList.toggle("off", k !== i); });
-    var r = c.getBoundingClientRect();
-    sparks((r.left + r.width / 2 - view.ox) / view.s, (r.top + r.height / 2 - view.oy) / view.s, 12, 260, 1);
-    Sound.sparkle();
-    // a moment to see the pick, then both leave
-    setTimeout(function () {
-      chips.forEach(function (x, k) {
-        var cs = getComputedStyle(x);
-        anim(x, [{ opacity: cs.opacity, transform: cs.transform === "none" ? "none" : cs.transform }, { opacity: 0, transform: "translateY(40px) scale(0.96)" }], 420, "cubic-bezier(0.4, 0, 0.7, 1)", k * 60);
+  // ---------------------------------------------------------------- the button
+  var btnOn = false;
+  function setBtn(text, on, quiet) {
+    var t = btn.querySelector(".t");
+    if (t.textContent && t.textContent !== text && !quiet) {
+      anim(t, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(-26px)" }], 180, "ease-in").finished.then(function () {
+        t.textContent = text;
+        anim(t, [{ opacity: 0, transform: "translateY(26px)" }, { opacity: 1, transform: "none" }], 320, SPRING);
       });
-      setTimeout(function () { if (choices.classList.contains("done")) choices.innerHTML = ""; }, 600);
-    }, 420);
-    cb(i);
+    } else t.textContent = text;
+    if (on && !btnOn && !quiet) anim(btn.querySelector(".core"), [{ transform: "scale(0.94)" }, { transform: "scale(1.06)", offset: 0.5 }, { transform: "scale(1)" }], 520, "ease-out");
+    btnOn = on;
+    btn.classList.toggle("off", !on);
   }
+  function hitBtn(p) { return btnOn && +getComputedStyle(btn).opacity > 0.5 && p.x > 80 && p.x < 1000 && p.y > 1478 && p.y < 1660; }
 
   // ---------------------------------------------------------------- effects
   function sparks(x, y, n, spread, size) {
@@ -421,178 +352,230 @@
     fx.appendChild(r);
     anim(r, [{ transform: "scale(0.3)", opacity: 1 }, { transform: "scale(1.6)", opacity: 0 }], 550, EASE_OUT).finished.then(function () { r.remove(); });
   }
+  function centreOf(el) { var r = el.getBoundingClientRect(); return { x: (r.left + r.width / 2 - view.ox) / view.s, y: (r.top + r.height / 2 - view.oy) / view.s }; }
 
-  // ---------------------------------------------------------------- static copy
-  $("legal").textContent = T.legal;
-  cta.querySelector(".t").textContent = T.cta;
-  go.querySelector(".t").textContent = T.start;
-  $("title").innerHTML = "<span></span>";
-  $("title").firstChild.textContent = T.startTitle;
-
-  // ---------------------------------------------------------------- scenes
-  function sec(t) { return Math.round(t * 1000); }
-
-  // S0. Start: "shh", a short line and "Listen to Maya". Any tap starts the chat; being a tap, it
-  // also lets the sound in, so her voice is there from the hook on.
-  function intro() {
-    state = "intro";
-    cam.style.transform = "translateY(" + -LIFT + "px)";
-    show($("logo"), 700, 100, "translateY(-20px)");
-    show(snd, 600, 250, "scale(0.6)");
-    Player.play("intro", { loop: true, fade: 0.2 });
-    Player.preload("hook");
-    later(450, function () { show($("title"), 700, 0, "translateY(24px)"); });
-    later(700, function () { show(go, 650, 0, "translateY(50px) scale(0.9)"); });
-  }
-  function begin(p) {
-    state = "begin";
-    tapRing(p);
-    [$("title"), go].forEach(function (el, k) {
-      anim(el, [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(30px) scale(0.97)" }], 420, "cubic-bezier(0.4, 0, 0.7, 1)", 120 + k * 60);
+  // ---------------------------------------------------------------- step 1: choose your style
+  var cards = {}, style = null;
+  function buildCards() {
+    ["real", "anime"].forEach(function (st) {
+      var c = mk("div", "card");
+      c.setAttribute("data-st", st);
+      c.innerHTML =
+        '<svg class="bg" viewBox="0 0 480 800"><path d="' + CARD_PATH + '" fill="url(#gFill)" fill-opacity="0.5"/><path d="' + CARD_PATH + '" fill="#000" fill-opacity="0.5"/></svg>' +
+        '<div class="clip"><div class="pic"></div></div>' +
+        outline(480, 800, CARD_PATH) +
+        '<div class="tag"></div><div class="check">' + CHECK + "</div>";
+      c.querySelector(".tag").textContent = T.styles[st];
+      c.querySelector(".clip").style.clipPath = "path('" + CARD_PATH + "')";
+      cardsEl.appendChild(c);
+      cards[st] = c;
     });
-    Player.next(hook, WAIT_START); // as soon as the "shh" is back in the pose the hook starts from
   }
-
-  // S1. Hook: she tucks her hair behind her ear, "Can I be your little secret…", then waits for the
-  // reply (her message stays until one is picked)
-  function hook(late) {
-    state = "hook";
-    chatAt(setOptions(T.replies1), true);
-    cut("hook", {
-      fade: late ? 0.7 : 0.45, soft: late,
-      onStart: function () {
-        later(sec(AT.hookMsg), function () { say(T.hook, 600); });
-        later(sec(AT.hookOptions), function () { offerOptions(react1); });
-      },
-      onEnd: function () { idle("idle1"); },
-    });
-    Player.preload("idle1");
-  }
-
-  // S2. Her reaction to the first reply: an eyebrow, or a quiet laugh as she leans in
-  function react1(i) {
-    state = "react1";
-    clearChat();
-    var slot = i ? "maybe" : "behave";
-    Player.preload(slot);
-    Player.next(function (late) {
-      cut(slot, {
-        fade: late ? 0.7 : 0.4, soft: late,
-        onStart: function () { later(sec(AT.react), function () { chatAt(CHAT_Y.low, true); say(T.react1[i], 600); }); },
-        onEnd: tension, lead: 0.5,
+  function startCards() {
+    ["real", "anime"].forEach(function (st, i) {
+      show(cards[st], 700, 350 + i * 140, "translateY(60px) scale(0.94)").finished.then(function () {
+        cards[st].style.opacity = ""; cards[st].style.transform = ""; cards[st].style.opacity = 1;
       });
-      Player.preload("tension");
     });
+    later(1300, function () { if (!style) cardsEl.classList.add("idle"); });
+  }
+  function pickStyle(st) {
+    if (style === st) return;
+    var first = !style;
+    style = st;
+    cardsEl.classList.remove("idle");
+    ["real", "anime"].forEach(function (s) {
+      cards[s].style.transform = "";
+      cards[s].classList.toggle("sel", s === st);
+      cards[s].classList.toggle("dim", s !== st);
+    });
+    var c = centreOf(cards[st].querySelector(".check"));
+    sparks(c.x, c.y, 12, 220, 1);
+    Sound.sparkle();
+    // her picture leans in a little
+    anim(cards[st].querySelector(".pic"), [{ transform: "scale(1)" }, { transform: "scale(1.05)", offset: 0.4 }, { transform: "scale(1)" }], 700, "cubic-bezier(0.3, 0.7, 0.4, 1)");
+    setBtn(T.next, true);
+    if (first) heroPlayer.preload(clipOf(0, "loop"));
   }
 
-  // S3. The camera eases in to chest and face: "Now tell me… should I be a good girl tonight…"
-  function tension() {
-    state = "tension";
-    cut("tension", {
-      fade: 0.45, settle: 2400,
-      onStart: function () {
-        // the camera comes down from the lifted wide framing along with her push-in
-        if (getComputedStyle(cam).transform !== "none") anim(cam, [{ transform: "translateY(" + -LIFT + "px)" }, { transform: "none" }], 2400, "cubic-bezier(0.42, 0, 0.3, 1)");
-        clearChat();
-        later(sec(AT.tensionMsg), function () { chatAt(setOptions(T.replies2), true); say(T.tension, 500); });
-        later(sec(AT.tensionOptions), function () { offerOptions(react2); });
-      },
-      onEnd: function () { idle("idle2"); }, lead: 0.5,
-    });
-    Player.preload("idle2");
+  // ---------------------------------------------------------------- step 2: the four girls
+  var heroPlayer = Player(heroV, 4);
+  var cur = 0, thumbs = [];
+  function key(i) { return style + "_" + GIRLS[i].id; }
+  function clipOf(i, kind) { return key(i) + "_" + kind; }
+  function ava(i) { return "var(--th-" + style + "-" + GIRLS[i].id + ")"; }
+  function setFrame(f, ms) {
+    if (!ms) { hero.style.transform = frameCss(f); return null; }
+    return anim(hero, [{ transform: getComputedStyle(hero).transform }, { transform: frameCss(f) }], ms, CAMERA);
   }
+  function buildThumbs() {
+    thumbsEl.innerHTML = "";
+    thumbs = GIRLS.map(function (g, i) {
+      var t = mk("div", "th");
+      t.style.top = i * 234 + "px";
+      t.setAttribute("data-i", i);
+      // the card's violet background (Figma), her picture with its glow, the outline
+      t.innerHTML = '<svg class="bg" viewBox="0 0 202 202"><path d="' + THUMB_PATH + '" fill="url(#gFill)" fill-opacity="0.5"/><path d="' + THUMB_PATH + '" fill="#000" fill-opacity="0.5"/></svg>' +
+        '<div class="clip"></div>' + outline(202, 202, THUMB_PATH);
+      var cl = t.querySelector(".clip");
+      cl.style.backgroundImage = ava(i);
+      cl.style.clipPath = "path('" + THUMB_PATH + "')";
+      thumbsEl.appendChild(t);
+      return t;
+    });
+  }
+  function setPill(i) {
+    var nm = pill.querySelector(".nm");
+    if (nm.textContent && nm.textContent !== GIRLS[i].name) {
+      anim(nm, [{ opacity: 0, transform: "translateY(14px)" }, { opacity: 1, transform: "none" }], 360, EASE_OUT);
+    }
+    nm.textContent = GIRLS[i].name;
+    pill.querySelector(".role").textContent = T.role;
+  }
+  function lineOf(i) { clearChat(); later(260, function () { say(GIRLS[i].line, 520, ava(i)); }); }
 
-  // S4. Her reaction to the second reply: steady eye contact, or fingertips on her collarbone
-  function react2(i) {
-    state = "react2";
-    clearChat();
-    var slot = i ? "tease" : "bad";
-    Player.preload(slot);
-    Player.next(function (late) {
-      cut(slot, {
-        fade: late ? 0.7 : 0.4, soft: late, settle: 2000,
-        onStart: function () { later(sec(AT.react), function () { chatAt(CHAT_Y.low, true); say(T.react2[i], 600); }); },
-        onEnd: finale, lead: 0.5,
+  function toGirls() {
+    state = "girls";
+    setBtn(T.choose, true);
+    // the cards step aside, the chosen style's Jade comes forward full size
+    ["real", "anime"].forEach(function (s) {
+      var sel = s === style;
+      anim(cards[s], [{ opacity: 1, transform: getComputedStyle(cards[s]).transform }, { opacity: 0, transform: sel ? "scale(1.12)" : "scale(0.9) translateY(40px)" }], sel ? 650 : 450, "cubic-bezier(0.4, 0, 0.6, 1)", sel ? 120 : 0);
+    });
+    setTimeout(function () { cardsEl.style.display = "none"; }, 900);
+    setTitle(T.girlsTitle, T.girlsSub, 120);
+    setFrame(FRAME.s2);
+    heroPlayer.play(clipOf(0, "loop"), { loop: true, fade: 0.01 });
+    anim(hero, [{ opacity: 0, transform: frameCss([FRAME.s2[0] * 1.06, FRAME.s2[1] - 30, FRAME.s2[2] - 60]) }, { opacity: 1, transform: frameCss(FRAME.s2) }], 900, CAMERA, 150);
+    buildThumbs();
+    thumbs.forEach(function (t, i) {
+      show(t, 600, 450 + i * 90, "translateX(80px)").finished.then(function () { t.style.opacity = 1; t.style.transform = ""; });
+    });
+    pill.style.top = PILL_TOP.s2 + "px";
+    show(pill, 600, 600, "translateX(-50%) translateY(20px)", "translateX(-50%)");
+    [navUp, navDown].forEach(function (n, k) {
+      show(n, 500, 800 + k * 360, "scale(0.4)").finished.then(function () { n.style.transform = ""; n.style.opacity = 1; n.classList.add("on"); });
+    });
+    setPill(0);
+    focus(0, 0, true);
+    for (var i = 1; i < GIRLS.length; i++) heroPlayer.preload(clipOf(i, "loop"));
+  }
+  // shows girl i (dir: -1 / 1, which way she came from; axis "x" for a swipe, "y" along the column)
+  function focus(i, dir, firstTime, axis) {
+    i = (i + GIRLS.length) % GIRLS.length;
+    if (i === cur && !firstTime) return;
+    cur = i;
+    heroPlayer.cancel();
+    thumbs.forEach(function (t, k) { t.classList.toggle("cur", k === i); });
+    setPill(i);
+    if (!firstTime) {
+      Sound.swish();
+      // she glides in from the side she came from; the one leaving just fades (nothing jumps)
+      var v = heroPlayer.play(clipOf(i, "loop"), {
+        loop: true, fade: 0.45,
+        onStart: function () { anim(v, [{ transform: "translate" + (axis === "x" ? "X" : "Y") + "(" + (dir || 1) * 46 + "px)" }, { transform: "none" }], 620, EASE_OUT); },
       });
-      Player.preload("final");
-    });
+      lineOf(i);
+    } else later(900, function () { say(GIRLS[i].line, 600, ava(i)); });
   }
-
-  // S5. Chin on her hand: "It's past midnight…" and the pulsing "Chat with Maya"; any tap goes to the store
-  function finale() {
+  // ---------------------------------------------------------------- step 3: the match
+  function toMatch() {
     state = "end";
     stage.classList.add("end");
-    cut("final", {
-      fade: 0.5, settle: 1200,
-      onStart: function () {
-        clearChat();
-        later(sec(AT.finalMsg), function () { chatAt(CHAT_Y.cta, true); say(T.final, 500); });
-        later(sec(AT.cta), function () { show(cta, 650, 0, "translateY(50px) scale(0.9)"); AD.gameEnd(); });
-      },
-      onEnd: function () { idle("cta"); }, lead: 0.45,
+    var i = cur;
+    heroPlayer.cancel();
+    hideTitle();
+    thumbs.forEach(function (t, k) { hide(t, 420, k * 60, "translateX(90px)"); });
+    [navUp, navDown].forEach(function (n) { n.classList.remove("on"); hide(n, 300, 0, "scale(0.5)"); });
+    clearChat();
+    // her thumbnail flashes as she is picked
+    var c = centreOf(thumbs[i]);
+    sparks(c.x, c.y, 12, 200, 1);
+    Sound.sparkle();
+    setPill(i);
+    anim(pill, [{ top: PILL_TOP.s2 + "px" }, { top: PILL_TOP.s3 + "px" }], 900, CAMERA, 200);
+    // the camera moves in: the frame slides to the centre and the closer greeting takes over,
+    // first lined up with her in the loop
+    heroPlayer.play(clipOf(i, "greet"), {
+      loop: true, fade: 0.7, soft: true, match: GREET_MATCH[key(i)], settle: 1500,
+      onStart: function () { setFrame(FRAME.s3, 1500); },
     });
-    Player.preload("cta");
+    setTimeout(function () {
+      chat.classList.add("wide");
+      say(GIRLS[i].greet, 650, ava(i));
+      setBtn(T.cta, true);
+      AD.gameEnd();
+    }, 900);
   }
 
-  // ---------------------------------------------------------------- sound toggle
-  // Sound is on from the start (CFG.sound). Where the browser does not allow sound before a tap, the
-  // clips play silently meanwhile (the button still shows "on") and her voice comes in with the
-  // first tap anywhere. The button switches it off and on.
-  var soundOn = !!CFG.sound, silenced = false;
-  function setSound(on, inTap) {
-    soundOn = on;
-    silenced = false;
-    snd.classList.toggle("off", !on);
-    Sound.setOn(on);
-    Player.setAudible(on, inTap);
-  }
-  setSound(soundOn, false);
-  Player.onSilenced = function () { silenced = true; };
+  Sound.setOn(!!CFG.sound);
 
   // ---------------------------------------------------------------- input
+  var down = null;
   stage.addEventListener("pointerdown", function (e) {
     Sound.init();
-    if (e.target.closest && e.target.closest("#snd")) {
-      setSound(!soundOn, true);
-      Sound.pop();
-      Player.kick();
+    players.forEach(function (p) { p.kick(); });
+    var p = toStage(e);
+    down = { x: p.x, y: p.y, t: Date.now() };
+    if (state === "end") { tapRing(p); AD.click(CFG.clickUrl); return; }
+    if (state === "style") {
+      var card = e.target.closest && e.target.closest(".card");
+      if (card) { Sound.tap(); pickStyle(card.getAttribute("data-st")); return; }
+      if (hitBtn(p)) { Sound.tap(); tapRing(p); toGirls(); }
       return;
     }
-    if (soundOn && silenced) setSound(true, true); // the first tap lets the sound in
-    Player.kick();
-    var p = toStage(e);
-    if (state === "intro") { if (soundOn) setSound(true, true); Sound.tap(); begin(p); return; }
-    if (state === "end") { tapRing(p); AD.click(CFG.clickUrl); return; }
-    var chip = e.target.closest && e.target.closest(".chip");
-    if (chip && onPick && !choices.classList.contains("done")) { Sound.tap(); pickOption(+chip.getAttribute("data-i")); }
+    if (state === "girls") {
+      var th = e.target.closest && e.target.closest(".th");
+      if (th) { var k = +th.getAttribute("data-i"); Sound.tap(); focus(k, k > cur ? 1 : -1, false, "y"); down = null; return; }
+      var nav = e.target.closest && e.target.closest(".nav");
+      if (nav) { Sound.tap(); var d = nav.id === "navDown" ? 1 : -1; focus(cur + d, d, false, "y"); down = null; return; }
+      if (hitBtn(p)) { Sound.tap(); tapRing(p); down = null; toMatch(); }
+    }
+  });
+  // a swipe across her (step 2) browses the girls
+  stage.addEventListener("pointerup", function (e) {
+    if (!down || state !== "girls") { down = null; return; }
+    var p = toStage(e), dx = p.x - down.x, dy = p.y - down.y;
+    if (down.x < 790 && down.y > 440 && down.y < 1440 && Date.now() - down.t < 900) {
+      if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.2) { var d = dx < 0 ? 1 : -1; focus(cur + d, d, false, "x"); }
+      else if (Math.abs(dy) > 70 && Math.abs(dy) > Math.abs(dx) * 1.2) { var e2 = dy < 0 ? 1 : -1; focus(cur + e2, e2, false, "y"); }
+    }
+    down = null;
   });
 
   document.addEventListener("visibilitychange", function () {
-    if (document.hidden) { Player.pause(); Sound.suspend(); } else { Player.resume(); Sound.resume(); }
+    if (document.hidden) { players.forEach(function (p) { p.pause(); }); Sound.suspend(); }
+    else { players.forEach(function (p) { p.resume(); }); Sound.resume(); }
   });
 
   // ---------------------------------------------------------------- go
   function start() {
     AD.gameReady();
-    // QA shortcuts: ?s=tension jumps to the second question, ?s=end to the final screen
-    if (Q.s === "tension" || Q.s === "end") {
-      $("logo").style.opacity = 1; snd.style.opacity = 1;
-      if (Q.s === "end") finale(); else tension();
+    state = "style";
+    show($("logo"), 700, 100, "translateY(-20px)");
+    buildCards();
+    // QA shortcuts: ?s=2 (&st=anime) the four girls, ?s=3 (&g=1) the match
+    if (Q.s === "2" || Q.s === "3") {
+      style = Q.st === "anime" ? "anime" : "real";
+      cardsEl.style.display = "none";
+      show(btn, 500, 300, "translateY(40px)");
+      toGirls();
+      if (Q.s === "3") { var g = +Q.g || 0; setTimeout(function () { focus(g, 1); setTimeout(toMatch, 900); }, 1200); }
       return;
     }
-    if (Q.s === "hook") { $("logo").style.opacity = 1; snd.style.opacity = 1; cam.style.transform = "translateY(" + -LIFT + "px)"; hook(); return; }
-    intro();
+    setTitle(T.styleTitle, T.styleSub, 150);
+    startCards();
+    show(btn, 650, 900, "translateY(50px) scale(0.94)");
+    setBtn(T.next, false, true);
   }
   function ready() {
     var go = function () { AD.onReady(start); };
     if (document.fonts && document.fonts.load) {
-      Promise.all(["400", "500", "600"].map(function (w) { return document.fonts.load(w + " 40px 'General Sans'"); }))
-        .then(go, go);
+      Promise.all(["400", "500", "600"].map(function (w) { return document.fonts.load(w + " 40px 'General Sans'"); })).then(go, go);
       setTimeout(go, 1500); // never wait long for fonts
     } else go();
   }
-  var started = false;
-  var _start = start;
+  var started = false, _start = start;
   start = function () { if (started) return; started = true; _start(); };
   ready();
 })();

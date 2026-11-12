@@ -1,44 +1,36 @@
-"""Prepares everything the playable embeds, from the animator's delivery.
+"""Prepares everything the playable embeds.
 
-    python tools/prepare_assets.py                 # clips + images
-    python tools/prepare_assets.py --only video --width 720 --crf 33
+    python tools/prepare_assets.py                 # clips + images + src/clips.js
+    python tools/prepare_assets.py --only video --crf 32
     python tools/prepare_assets.py --only images
 
-Videos: the clips in src/EVA AI Playable Ads #3/ (or a file named after the slot in
-src/animations/, which wins) are re-encoded to src/video/<slot>.mp4 (720 px, H.264; the voiced
-ones keep their audio as mono AAC, 48 kbit/s). DELIVERY below says which file fills which slot.
+Videos: the clips in src/EVA AI Playable Ads #2/ are re-encoded to src/video/<slot>.mp4 (H.264,
+no audio), each cut to what the screen actually shows of it:
+  step 2 (each girl's loop): the part left of the thumbnails, shown x1.3
+  step 3 (her greeting): the frame without its bottom (under the button)
 
-Images: the first frame of the intro clip becomes src/assets/poster.webp (shown under the videos
-until the first frame is decoded), and her face from the close-up idle becomes the round chat
-avatar maya_ava.webp.
+Images (from figma-src/, the girls cut out in Figma, both styles): the step-1 cards (Jade) and the
+step-2 thumbnails, each drawn the way Figma places her in the card / thumbnail, over the soft
+pink glow of the design (the card's own violet background is CSS/SVG).
 
 Needs ffmpeg: on PATH or from `pip install imageio-ffmpeg`.
 """
 import argparse, shutil, subprocess
 from pathlib import Path
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
 
 ROOT = Path(__file__).resolve().parent.parent
-ANIM = ROOT / "src" / "animations"
+DELIVERED = ROOT / "src" / "EVA AI Playable Ads #2"
+FIG = ROOT / "figma-src"
 OUT_A = ROOT / "src" / "assets"
 OUT_V = ROOT / "src" / "video"
 
-DELIVERED = ROOT / "src" / "EVA AI Playable Ads #3"
-# slot: (file in the delivery, without " CRF 30.mp4"; keep its audio)
-DELIVERY = {
-    "intro": ("Step_1_shh loop_no sound", False),       # start: "shh", finger on her lips (loop); the first tap lets the sound in
-    "hook": ("Step_1_hair tuck_sound", True),          # S1: hair behind the ear, "Can I be your little secret…"
-    "idle1": ("Step_1_idle loop_no sound", False),     # S1: waits for the first reply
-    "behave": ("Step_2-1_eyebrow raise_no sound", False),
-    "maybe": ("Step_2-2_laugh lean_sound", True),      # a quiet laugh, leans in
-    "tension": ("Step_2-3_good girl line_sound", True),  # pushes in: "Now tell me… should I be a good girl…"
-    "idle2": ("Step_2-4_idle loop_no sound", False),   # chest and face, waits for the second reply
-    "bad": ("Step_3-1_bad side look_no sound", False),
-    "tease": ("Step_3-2_collarbone tease_no sound", False),
-    "final": ("Step_4-1_midnight line_sound", True),   # chin on hand: "It's past midnight…"
-    "cta": ("Step_4-2_idle loop_sound", False),        # the take that follows the voiced midnight line (it has no audio)
-}
-SLOTS = list(DELIVERY)
+STYLES = {"real": ("Step_2", "Step_3"), "anime": ("Step_2-1", "Step_3-1")}
+GIRLS = {1: "jade", 2: "mia", 3: "scarlett", 4: "yuna"}  # v1..v4 in the delivery
+
+# Crops of the 1090 x 1920 source (x, y, w, h) and the output width
+LOOK = ((130, 200, 860, 1480), 596)  # step 2: FRAME.s2 in game.js shows exactly this
+GREET = ((0, 0, 1090, 1650), 600)    # step 3: the bottom is under the button and the shade
 
 
 def ffmpeg():
@@ -49,72 +41,120 @@ def ffmpeg():
     return imageio_ffmpeg.get_ffmpeg_exe()
 
 
-def frame(src, t):
-    raw = subprocess.run([ffmpeg(), "-v", "error", "-ss", str(t), "-i", str(src), "-frames:v", "1",
-                          "-f", "image2pipe", "-c:v", "png", "-"], capture_output=True, check=True).stdout
-    import io
-    return Image.open(io.BytesIO(raw)).convert("RGB")
+def src(name):
+    p = DELIVERED / f"{name} CRF 30.mp4"
+    return p if p.exists() else DELIVERED / f"{name}.mp4"
 
 
-def clip_src(slot):
-    own = ANIM / f"{slot}.mp4"
-    return own if own.exists() else DELIVERED / f"{DELIVERY[slot][0]} CRF 30.mp4"
+def slots():
+    """(slot, source file, crop, output width)"""
+    for st, (s2, s3) in STYLES.items():
+        for v, g in GIRLS.items():
+            yield f"{st}_{g}_loop", src(f"{s2} - v{v} - loop"), *LOOK
+            yield f"{st}_{g}_greet", src(f"{s3} - v{v} - greeting"), *GREET
+
+
+def vf(crop, width):
+    # crops are in 1090 x 1920 source pixels (one clip of the delivery is 720 x 1280: brought up
+    # first); then a light denoise: the source's own compression noise costs bits and shows nothing
+    return (f"scale=1090:1920:flags=lanczos,crop={crop[2]}:{crop[3]}:{crop[0]}:{crop[1]},"
+            f"hqdn3d=1.2:1.2:3:3,scale={width}:-2:flags=lanczos,setsar=1")
+
+
+def encode_videos(crf, only=None):
+    OUT_V.mkdir(parents=True, exist_ok=True)
+    ff = ffmpeg()
+    total = 0
+    for slot, s, crop, width in slots():
+        if only and only not in slot:
+            continue
+        out = OUT_V / f"{slot}.mp4"
+        subprocess.run([ff, "-v", "error", "-y", "-i", str(s), "-an", "-vf", vf(crop, width),
+                        "-c:v", "libx264", "-preset", "veryslow", "-crf", str(crf),
+                        "-x264-params", "keyint=48:min-keyint=12:bframes=6:ref=6:aq-mode=3:aq-strength=0.9:deblock=-1,-1",
+                        "-profile:v", "high", "-level", "4.0", "-pix_fmt", "yuv420p",
+                        "-movflags", "+faststart", str(out)], check=True)
+        total += out.stat().st_size
+        print(f"  {slot:20s} {out.stat().st_size / 1024:6.0f} KB")
+    print(f"  total {total / 1e6:.2f} MB")
+
+
+def write_clips():
+    """src/clips.js: every slot with its file and the part of the 1090 x 1920 source frame it holds
+    (game.js places each clip there, so the framings of the scenes work on the source's pixels)."""
+    lines = []
+    for slot, _, crop, _ in slots():
+        lines.append(f'  {slot}: {{ src: "video/{slot}.mp4", crop: {list(crop)} }},')
+    head = ("// Generated by tools/prepare_assets.py: each clip and the part of the 1090 x 1920 source frame",
+            "// it holds (x, y, w, h). The build inlines the files; game.js turns them into blob: URLs.")
+    text = chr(10).join(head + ("window.PLAYABLE_CLIPS = {",) + tuple(lines) + ("};", ""))
+    (ROOT / "src" / "clips.js").write_text(text, encoding="utf-8")
+
+
+def picture(w, h, k, girl, place, glow):
+    """A card / thumbnail picture (w x h in stage px, drawn at k x): the pink glow ellipse, then the
+    girl cut out, both where Figma puts them; transparent around, the card shape clips it."""
+    W, H = round(w * k), round(h * k)
+    im = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    gx, gy, gw, gh, blur = glow
+    g = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(g).ellipse([gx * k, gy * k, (gx + gw) * k, (gy + gh) * k], fill=round(255 * 0.3))
+    g = g.filter(ImageFilter.GaussianBlur(blur * k))
+    pink = Image.new("RGBA", (W, H), (233, 87, 196, 0))
+    pink.putalpha(g)
+    im.alpha_composite(pink)
+    x, y, pw = place
+    cut = Image.open(FIG / f"{girl}.webp").convert("RGBA")
+    ph = pw * cut.height / cut.width
+    cut = cut.resize((round(pw * k), round(ph * k)), Image.LANCZOS)
+    im.alpha_composite(cut, (round(x * k), round(y * k)))
+    return im
+
+
+# Figma (497:326 / 497:313, 609:1037): where each girl sits in the card or thumbnail, [x, y, width]
+CARD_PLACE = {"real": (-52, 62, 720), "anime": (-45, 72, 603)}
+CARD_GLOW = (38, 90, 403, 829, 35)
+THUMB_PLACE = {"jade": (-2.5, 1.7, 234.7), "mia": (-12, 8, 224), "scarlett": (-8, 8, 218), "yuna": (-11, 4, 223)}
+THUMB_GLOW = (16, 22.7, 169.6, 209.3, 14.7)
+
+
+def figure(girl):
+    """Her outline in the cut-out, as fractions of its width: top, height, centre of the head."""
+    a = Image.open(FIG / f"{girl}.webp").getchannel("A").point(lambda v: 255 if v > 40 else 0)
+    x0, y0, x1, y1 = a.getbbox()
+    head = a.crop((0, y0, a.width, y0 + round(a.width * 0.35))).getbbox()
+    return y0 / a.width, (y1 - y0) / a.width, ((head[0] + head[2]) / 2) / a.width
+
+
+def anime_thumb(g):
+    """Figma only has the realistic thumbnails: the anime girl is framed like her realistic self
+    (same figure height, same head top and centre in the 202 px square)."""
+    x, y, w = THUMB_PLACE[g]
+    top, height, cx = figure(f"real_{g}")
+    a_top, a_height, a_cx = figure(f"anime_{g}")
+    aw = w * height / a_height  # same figure height
+    return (x + cx * w - a_cx * aw, y + top * w - a_top * aw, aw)
 
 
 def prepare_images():
     OUT_A.mkdir(parents=True, exist_ok=True)
-    # poster: the very first frame of the intro, so the stage never shows empty while the video starts
-    im = frame(clip_src("intro"), 0)
-    im = im.resize((720, round(im.height * 720 / im.width)), Image.LANCZOS)
-    im.save(OUT_A / "poster.webp", quality=70, method=6)
-    print("  poster.webp", im.size, (OUT_A / "poster.webp").stat().st_size // 1024, "KB")
-    # chat avatar: her face from the first frame of the close-up idle (1090 x 1920 source), round
-    im = frame(clip_src("idle2"), 0)
-    k = im.width / 1090  # face box measured on the 1090 px wide source: centre (548, 600), 760 px
-    box = [round((548 - 380) * k), round((600 - 380) * k), round((548 + 380) * k), round((600 + 380) * k)]
-    face = im.crop(box).resize((180, 180), Image.LANCZOS).convert("RGBA")
-    mask = Image.new("L", (720, 720), 0)
-    ImageDraw.Draw(mask).ellipse([0, 0, 719, 719], fill=255)
-    face.putalpha(mask.resize((180, 180), Image.LANCZOS))
-    face.save(OUT_A / "maya_ava.webp", quality=85, method=6)
-    print("  maya_ava.webp", (OUT_A / "maya_ava.webp").stat().st_size // 1024, "KB")
-
-
-def encode_videos(width, crf):
-    """Each slot's clip from the animator's delivery (src/EVA AI Playable Ads #3/), or a file named
-    after the slot in src/animations/. The "_sound" renders are separate takes (lip-synced, so the
-    picture differs from the silent take); they are the ones that carry her voice and chain together."""
-    OUT_V.mkdir(parents=True, exist_ok=True)
-    ff = ffmpeg()
-    total = 0
-    for slot in SLOTS:
-        audio = DELIVERY[slot][1]
-        src = clip_src(slot)
-        if not src.exists():
-            print(f"  {slot:8s} missing ({src.name})")
-            continue
-        out = OUT_V / f"{slot}.mp4"
-        a = ["-c:a", "aac", "-b:a", "48k", "-ac", "1"] if audio else ["-an"]
-        subprocess.run([ff, "-v", "error", "-y", "-i", str(src),
-                        # a light denoise takes out the source's own compression noise (it costs bits and
-                        # shows nothing); x264 at its most thorough, one keyframe per clip (they are short)
-                        "-vf", f"hqdn3d=1.2:1.2:3:3,scale={width}:-2:flags=lanczos,setsar=1",
-                        "-c:v", "libx264", "-preset", "veryslow", "-crf", str(crf),
-                        "-x264-params", "keyint=240:min-keyint=240:bframes=6:ref=6:aq-mode=3:aq-strength=0.9:deblock=-1,-1",
-                        "-profile:v", "high", "-level", "4.0", "-pix_fmt", "yuv420p", *a,
-                        "-movflags", "+faststart", str(out)], check=True)
-        total += out.stat().st_size
-        print(f"  {slot:8s} {out.stat().st_size / 1024:7.0f} KB  <- {src.name}")
-    print(f"  total {total / 1048576:.2f} MB")
+    for st in STYLES:
+        picture(480, 800, 1.2, f"{st}_jade", CARD_PLACE[st], CARD_GLOW).save(OUT_A / f"card_{st}.webp", quality=78, method=6)
+        for g in GIRLS.values():
+            place = THUMB_PLACE[g] if st == "real" else anime_thumb(g)
+            picture(202, 202, 1.5, f"{st}_{g}", place, THUMB_GLOW).save(OUT_A / f"th_{st}_{g}.webp", quality=80, method=6)
+    sizes = sum(p.stat().st_size for p in OUT_A.glob("*.webp"))
+    print(f"  images {sizes / 1024:.0f} KB")
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--width", type=int, default=720)
-    ap.add_argument("--crf", type=int, default=33)  # the whole playable stays under 5 MB
+    ap.add_argument("--crf", type=int, default=32)
     ap.add_argument("--only", choices=["video", "images"])
+    ap.add_argument("--slots", help="re-encode only the slots whose name contains this")
     a = ap.parse_args()
     if a.only != "video":
         prepare_images()
     if a.only != "images":
-        encode_videos(a.width, a.crf)
+        encode_videos(a.crf, a.slots)
+    write_clips()

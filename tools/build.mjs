@@ -31,7 +31,7 @@ const dataUri = (file) => {
 const inlineCss = (file) => {
   const dir = dirname(file);
   return readFileSync(file, "utf8")
-    .replace(/url\((["']?)(?!data:)([^"')]+)\1\)/g, (_, q, p) => `url("${dataUri(resolve(dir, p))}")`)
+    .replace(/url\((["']?)(?!data:|#)([^"')]+)\1\)/g, (_, q, p) => `url("${dataUri(resolve(dir, p))}")`)
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/\s*\n\s*/g, "\n")
     .replace(/\s*([{};,])\s*/g, "$1");

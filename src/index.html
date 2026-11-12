@@ -4,43 +4,41 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="ad.orientation" content="portrait">
-<title>EVA AI — What Will You Reply?</title>
+<title>EVA AI — Find Your Type</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="stage">
-  <!-- the picture ("camera": lifted on the first, wide scenes) -->
-  <div id="cam" class="abs">
-    <!-- the first frame, under the videos until the first one is on screen -->
-    <div id="poster" class="abs fill"></div>
-    <!-- video layers: game.js cross-fades between them -->
-    <div id="videos" class="abs fill">
-      <video class="abs fill" muted playsinline webkit-playsinline preload="auto" disableremoteplayback></video>
-      <video class="abs fill" muted playsinline webkit-playsinline preload="auto" disableremoteplayback></video>
-      <video class="abs fill" muted playsinline webkit-playsinline preload="auto" disableremoteplayback></video>
-      <video class="abs fill" muted playsinline webkit-playsinline preload="auto" disableremoteplayback></video>
-    </div>
-  </div>
+  <div id="glow" class="abs fill"></div>
+
+  <!-- the girl, steps 2 and 3: video layers in the source frame's pixels (1090 x 1920); game.js moves
+       and scales this frame like a camera -->
+  <div id="hero" class="abs"><div id="heroV" class="abs"></div></div>
   <div id="shadeTop" class="abs"></div>
   <div id="shadeBot" class="abs"></div>
+  <div id="shadeSide" class="abs"></div>
 
   <div id="logo" class="abs"></div>
-  <!-- sound on / off -->
-  <div id="snd" class="abs off" role="button" aria-label="Sound"><b class="ico"><svg viewBox="0 0 24 24"><path class="spk" d="M4 9.2h3.2L11.6 5v14l-4.4-4.2H4z"/><path class="w1" d="M14.6 9.3a3.6 3.6 0 0 1 0 5.4"/><path class="w2" d="M17.1 6.8a7.2 7.2 0 0 1 0 10.4"/><path class="x" d="M15.2 9.6l4.8 4.8M20 9.6l-4.8 4.8"/></svg></b></div>
 
-  <!-- Maya's messages, newest at the bottom -->
+  <div id="title" class="abs"><div class="h"></div><div class="sub"></div></div>
+
+  <!-- step 1: the two style cards (filled by game.js) -->
+  <div id="cards" class="abs"></div>
+
+  <!-- steps 2-3: her name -->
+  <div id="pill" class="abs"><b class="nm"></b><i class="dot"></i><span class="role"></span></div>
+
+  <!-- step 2: the four girls, with up / down buttons at the ends of the column -->
+  <div id="thumbs" class="abs"></div>
+  <div id="navUp" class="nav abs"><i></i></div>
+  <div id="navDown" class="nav abs"><i></i></div>
+
+  <!-- her messages -->
   <div id="chat" class="abs"></div>
-  <!-- the two replies to pick from -->
-  <div id="choices" class="abs"></div>
 
-  <!-- the start: a short line and a button; the first tap also lets her voice in -->
-  <div id="title" class="abs"></div>
-  <div id="go" class="btn abs"><i class="r1"></i><i class="r2"></i><b class="core"><span class="shine"></span><span class="t"></span></b></div>
-
-  <div id="cta" class="btn abs"><i class="r1"></i><i class="r2"></i><b class="core"><span class="shine"></span><span class="t"></span></b></div>
+  <div id="btn" class="btn off abs"><i class="r1"></i><i class="r2"></i><b class="core"><span class="shine"></span><span class="t"></span></b></div>
 
   <div id="fx" class="abs fill"></div>
-  <div id="legal" class="abs"></div>
 </div>
 
 <script src="fit.js"></script>

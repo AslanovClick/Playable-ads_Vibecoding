@@ -9,8 +9,8 @@ window.VIEW = (function () {
     var vw = window.innerWidth, vh = window.innerHeight;
     if (!vw || !vh) return; // some ad webviews report 0x0 before they are shown
     view.s = Math.min(vw / W, vh / H);
-    view.ox = (vw - W * view.s) / 2;
-    view.oy = (vh - H * view.s) / 2;
+    view.ox = Math.round((vw - W * view.s) / 2); // whole pixels: no half-lit column at the edges
+    view.oy = Math.round((vh - H * view.s) / 2);
     stage.style.transform = "translate(" + view.ox + "px," + view.oy + "px) scale(" + view.s + ")";
     stage.style.visibility = "visible";
   }
